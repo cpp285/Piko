@@ -1,4 +1,6 @@
 "use client"
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState, useEffect, useRef } from 'react'
 import { ZOOM_MIN, ZOOM_MAX } from '../constants'
@@ -14,6 +16,7 @@ const FADE_DELAY_MS = 1200
 const HIDE_DELAY_MS = 1800
 
 export default function ZoomControls({ zoom, onZoomChange }: ZoomControlsProps) {
+  useLocale();
   const [showLevel, setShowLevel] = useState(false)
   const [fadeOut, setFadeOut] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -74,8 +77,7 @@ export default function ZoomControls({ zoom, onZoomChange }: ZoomControlsProps) 
           )}
           style={{ opacity: fadeOut ? 0 : 1 }}
         >
-          {zoom}x
-        </div>
+          {trNode(zoom)}{tr("x")}</div>
       )}
 
       {/* Vertically stacked buttons — top-left */}
@@ -93,7 +95,7 @@ export default function ZoomControls({ zoom, onZoomChange }: ZoomControlsProps) 
               </svg>
             </button>
           </TooltipTrigger>
-          <TooltipContent side="right">Zoom in (Ctrl+Scroll)</TooltipContent>
+          <TooltipContent side="right">{tr("Zoom in (Ctrl+Scroll)")}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -107,7 +109,7 @@ export default function ZoomControls({ zoom, onZoomChange }: ZoomControlsProps) 
               </svg>
             </button>
           </TooltipTrigger>
-          <TooltipContent side="right">Zoom out (Ctrl+Scroll)</TooltipContent>
+          <TooltipContent side="right">{tr("Zoom out (Ctrl+Scroll)")}</TooltipContent>
         </Tooltip>
       </div>
     </>

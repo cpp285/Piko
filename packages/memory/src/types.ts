@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @bit-office/memory — Type definitions
+// @piko/memory — Type definitions
 //
 // Four-layer memory model:
 //   L0 Ephemeral  – in-memory conversation sliding window (managed by caller)

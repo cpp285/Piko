@@ -1,3 +1,5 @@
+"use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
 import { useRef, useEffect, memo, useCallback, useState } from "react";
 import { useScrollAnchor } from "./useScrollAnchor";
 import { getStatusConfig, BACKEND_OPTIONS } from "./office-constants";
@@ -10,7 +12,7 @@ import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/store/office-store";
 import dynamic from "next/dynamic";
 
-const MessageBubble = dynamic(() => import("./MessageBubble"), { ssr: false });
+const MessageBubble = dynamic(() => { return import("./MessageBubble"); }, { ssr: false });
 
 /** Auto-resize a textarea to fit content (1-row min, maxRows cap).
  *  Works consistently across Chrome (Blink) and Tauri/Safari (WebKit). */
@@ -45,6 +47,7 @@ function autoResize(el: HTMLTextAreaElement | null, maxRows = 5) {
 
 /** Sentinel that triggers loadMore when scrolled into view */
 function LoadMoreSentinel({ onLoadMore }: { onLoadMore: () => void }) {
+  useLocale();
   const ref = useRef<HTMLDivElement>(null);
   const cbRef = useRef(onLoadMore);
   cbRef.current = onLoadMore;
@@ -183,6 +186,7 @@ const ChatMessageList = memo(function ChatMessageList({
   isOwner: boolean;
   onApproval: (approvalId: string, decision: "yes" | "no") => void;
 }) {
+  useLocale();
   return (
     <>
       {/* Phase banner for team leads */}
@@ -197,8 +201,8 @@ const ChatMessageList = memo(function ChatMessageList({
             display: "flex", alignItems: "center", gap: 6,
             fontSize: TERM_SIZE, fontFamily: TERM_FONT,
           }}>
-            <span style={{ color: TERM_DIM, textTransform: "uppercase", letterSpacing: "0.05em" }}>{teamPhase}</span>
-            <span style={{ color: TERM_DIM }}>{info.hint}</span>
+            <span style={{ color: TERM_DIM, textTransform: "uppercase", letterSpacing: "0.05em" }}>{trNode(teamPhase)}</span>
+            <span style={{ color: TERM_DIM }}>{trNode(info.hint)}</span>
           </div>
         );
       })()}
@@ -212,7 +216,7 @@ const ChatMessageList = memo(function ChatMessageList({
 
       {hasMoreMessages && <LoadMoreSentinel onLoadMore={onLoadMore} />}
       {visibleMessages.map((msg) => (
-        <MessageBubble key={msg.id} msg={msg} agentName={name} onPreview={onPreview} onReview={onReview} isTeamLead={isTeamLead} isTeamMember={isTeamMember} teamPhase={isTeamLead ? teamPhase : null} detectedBackends={detectedBackends} />
+        <div key={msg.id} data-message-role={msg.role}><MessageBubble msg={msg} agentName={name} onPreview={onPreview} onReview={onReview} isTeamLead={isTeamLead} isTeamMember={isTeamMember} teamPhase={isTeamLead ? teamPhase : null} detectedBackends={detectedBackends} /></div>
       ))}
 
       {pendingApproval && (
@@ -222,10 +226,10 @@ const ChatMessageList = memo(function ChatMessageList({
           fontSize: TERM_SIZE, fontFamily: TERM_FONT,
         }}>
           <div style={{ color: TERM_SEM_YELLOW, marginBottom: 6 }}>
-            {pendingApproval.title}
+            {trNode(pendingApproval.title)}
           </div>
           <div style={{ color: TERM_TEXT, marginBottom: 10, lineHeight: 1.65 }}>
-            {pendingApproval.summary}
+            {trNode(pendingApproval.summary)}
           </div>
           {isOwner && (
             <div style={{ display: "flex", gap: 6 }}>
@@ -233,12 +237,12 @@ const ChatMessageList = memo(function ChatMessageList({
                 className="term-btn"
                 onClick={() => onApproval(pendingApproval.approvalId, "yes")}
                 style={{ flex: 1, padding: "6px", border: `1px solid ${TERM_DIM}`, backgroundColor: "transparent", color: TERM_SEM_GREEN, cursor: "pointer", fontSize: TERM_SIZE, fontFamily: TERM_FONT }}
-              >approve</button>
+              >{tr("approve")}</button>
               <button
                 className="term-btn"
                 onClick={() => onApproval(pendingApproval.approvalId, "no")}
                 style={{ flex: 1, padding: "6px", border: `1px solid ${TERM_DIM}`, backgroundColor: "transparent", color: TERM_SEM_RED, cursor: "pointer", fontSize: TERM_SIZE, fontFamily: TERM_FONT }}
-              >reject</button>
+              >{tr("reject")}</button>
             </div>
           )}
         </div>
@@ -253,7 +257,7 @@ const ChatMessageList = memo(function ChatMessageList({
             <span style={{ color: TERM_DIM }} className="working-dots"><span className="working-dots-mid" /></span>
             {hint && (
               <span style={{ color: TERM_DIM, fontSize: TERM_SIZE, fontFamily: TERM_FONT }}>
-                {hint.slice(0, 60)}
+                {trNode(hint.slice(0, 60))}
               </span>
             )}
           </div>
@@ -278,6 +282,7 @@ function ReviewFooter({ onApplyReviewFixes, onDismissReview }: {
   onApplyReviewFixes?: (userFeedback?: string) => void;
   onDismissReview?: () => void;
 }) {
+  useLocale();
   const [feedback, setFeedback] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -305,7 +310,7 @@ function ReviewFooter({ onApplyReviewFixes, onDismissReview }: {
                 onApplyReviewFixes(feedback || undefined);
               }
             }}
-            placeholder="Add feedback for the fix..."
+            placeholder={tr("Add feedback for the fix...")}
             className=""
             style={{ flex: 1 }}
           />
@@ -318,14 +323,14 @@ function ReviewFooter({ onApplyReviewFixes, onDismissReview }: {
             variant="success"
             size="sm"
             onClick={() => onApplyReviewFixes(feedback || undefined)}
-          >apply fixes</TermButton>
+          >{tr("apply fixes")}</TermButton>
         )}
         {onDismissReview && (
           <TermButton
             variant="ghost"
             size="sm"
             onClick={onDismissReview}
-          >Dismiss</TermButton>
+          >{tr("Dismiss")}</TermButton>
         )}
       </div>
     </div>
@@ -334,6 +339,7 @@ function ReviewFooter({ onApplyReviewFixes, onDismissReview }: {
 
 /** Matrix-style binary rain on canvas — each column spawns at random x/y */
 function MatrixRainCanvas({ color, font }: { color: string; font: string }) {
+  useLocale();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const cvs = canvasRef.current;
@@ -423,6 +429,7 @@ function MatrixRainCanvas({ color, font }: { color: string; font: string }) {
 }
 
 const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
+  useLocale();
   const {
     agentId, name, role, backend, status, cwd, workDir,
     messages, visibleMessages, hasMoreMessages,
@@ -505,7 +512,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
         )}
         style={{
           borderBottom: `1px solid ${TERM_BORDER_DIM}`,
-          boxShadow: `0 2px 6px -1px rgba(0,0,0,0.45), inset 0 -1px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)`,
+          boxShadow: `0 2px 6px -1px rgba(52,73,57,0.08), inset 0 -1px 0 rgba(52,73,57,0.08), inset 0 1px 0 rgba(255,255,255,0.03)`,
         }}
       >
         {/* Inline avatar (console mode) */}
@@ -522,21 +529,21 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                   </div>
                 </div>
               )}
-              <span className="text-[13px] text-term-text-bright font-medium tracking-tight shrink-0">{inlineAvatar.name}</span>
+              <span className="text-[13px] text-term-text-bright font-medium tracking-tight shrink-0">{trNode(inlineAvatar.name)}</span>
               {inlineAvatar.isTeamLead && (
                 <span
                   className="text-[9px] font-mono font-bold text-sem-yellow px-[3px] leading-[15px] rounded-sm shrink-0"
                   style={{ border: `1px solid ${TERM_SEM_YELLOW}40` }}
-                >LEAD</span>
+                >{tr("LEAD")}</span>
               )}
               {backendName && (
                 <span className="text-[11px] text-term-text opacity-60 shrink-0 tracking-wide">
-                  {backendName}
+                  {trNode(backendName)}
                 </span>
               )}
               {roleName && (
                 <span className="text-[11px] text-term-text opacity-45 shrink-0 tracking-wide hidden sm:inline">
-                  {roleName}
+                  {trNode(roleName)}
                 </span>
               )}
             </>
@@ -544,7 +551,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
         })()}
         {!hideInfoRole && !inlineAvatar && (
           <span className="text-term-text-bright shrink-0 tracking-tight">
-            {role?.split("\u2014")[0]?.trim()}
+            {trNode(role?.split("\u2014")[0]?.trim())}
           </span>
         )}
         {(cwd || workDir) && (() => {
@@ -559,10 +566,10 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                   direction: "rtl", textAlign: "left",
                   fontSize: TERM_SIZE - 1,
                 }}>
-                  <bdi>{display}</bdi>
+                  <bdi>{trNode(display)}</bdi>
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-xs break-all">{raw}</TooltipContent>
+              <TooltipContent side="bottom" className="max-w-xs break-all">{trNode(raw)}</TooltipContent>
             </Tooltip>
           );
         })()}
@@ -579,7 +586,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
               }}
             />
           </TooltipTrigger>
-          <TooltipContent side="bottom">{cfg.label}</TooltipContent>
+          <TooltipContent side="bottom">{trNode(cfg.label)}</TooltipContent>
         </Tooltip>
         {tokenUsage.inputTokens > 0 && <TokenBadge inputTokens={tokenUsage.inputTokens} outputTokens={tokenUsage.outputTokens} />}
         {!teamId && isOwner && (
@@ -588,10 +595,10 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
               <button
                 className="tdx"
                 onClick={(e) => { e.stopPropagation(); onFire(agentId); }}
-                aria-label="Fire agent"
-              >{"\u2715"}</button>
+                aria-label={tr("Fire agent")}
+              >{trNode("\u2715")}</button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Fire agent</TooltipContent>
+            <TooltipContent side="bottom">{tr("Fire agent")}</TooltipContent>
           </Tooltip>
         )}
       </div>
@@ -600,14 +607,13 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
       {isExternal && (
         <div className="flex-1 flex flex-col bg-background min-h-0 overflow-hidden">
           {/* Compact info header */}
-          <div className="px-3 py-2 bg-term-panel shrink-0 shadow-[0_3px_6px_-2px_rgba(0,0,0,0.45),inset_0_-1px_0_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <div className="px-3 py-2 bg-term-panel shrink-0 shadow-[0_3px_6px_-2px_rgba(52,73,57,0.08),inset_0_-1px_0_rgba(52,73,57,0.08),inset_0_1px_0_rgba(255,255,255,0.03)]">
             <div className="font-mono text-term text-muted-foreground mb-1 tracking-wide">
-              EXTERNAL PROCESS
-            </div>
+              {tr("EXTERNAL PROCESS")}</div>
             <div className="flex gap-3 font-mono text-term text-muted-foreground flex-wrap">
-              <span>{backend ?? "unknown"}</span>
-              <span>PID {pid ?? "\u2014"}</span>
-              <span className="term-path-scroll max-w-[300px]" title={cwd ?? undefined}>
+              <span>{trNode(backend ?? "unknown")}</span>
+              <span>{tr("PID")}{trNode(pid ?? "\u2014")}</span>
+              <span className="term-path-scroll max-w-[300px]" title={tr(cwd ?? undefined)}>
                 {cwd ?? "\u2014"}
               </span>
             </div>
@@ -627,8 +633,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
 
           {/* Read-only footer */}
           <div className="px-3 py-1.5 bg-muted font-mono text-term text-muted-foreground text-center shrink-0">
-            Read-only — this process is running externally
-          </div>
+            {tr("Read-only — this process is running externally")}</div>
         </div>
       )}
 
@@ -650,9 +655,9 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
             fontSize: TERM_SIZE, fontFamily: TERM_FONT,
             flexShrink: 0,
           }}>
-            <span style={{ color: TERM_GREEN, fontSize: 9, fontWeight: 600, padding: "1px 6px", borderRadius: 3, background: `${TERM_GREEN}18`, letterSpacing: "0.04em", textTransform: "uppercase" }}>REVIEW</span>
+            <span style={{ color: TERM_GREEN, fontSize: 9, fontWeight: 600, padding: "1px 6px", borderRadius: 3, background: `${TERM_GREEN}18`, letterSpacing: "0.04em", textTransform: "uppercase" }}>{tr("REVIEW")}</span>
             <span style={{ color: TERM_TEXT_BRIGHT }}>
-              {reviewerOverlay.name}
+              {trNode(reviewerOverlay.name)}
             </span>
             {/* Scanning indicator (busy) */}
             {reviewerOverlay.busy && (
@@ -667,10 +672,10 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                 letterSpacing: "0.04em", textTransform: "uppercase",
                 color: reviewerOverlay.verdict === "PASS" ? TERM_SEM_GREEN : TERM_SEM_RED,
                 background: reviewerOverlay.verdict === "PASS" ? `${TERM_SEM_GREEN}18` : `${TERM_SEM_RED}18`,
-              }}>{reviewerOverlay.verdict}</span>
+              }}>{trNode(reviewerOverlay.verdict)}</span>
             )}
             {!reviewerOverlay.busy && reviewerOverlay.status === "error" && (
-              <span style={{ color: TERM_SEM_RED, fontSize: 9, fontWeight: 600, padding: "1px 6px", borderRadius: 3, background: `${TERM_SEM_RED}18`, letterSpacing: "0.04em", textTransform: "uppercase" }}>ERROR</span>
+              <span style={{ color: TERM_SEM_RED, fontSize: 9, fontWeight: 600, padding: "1px 6px", borderRadius: 3, background: `${TERM_SEM_RED}18`, letterSpacing: "0.04em", textTransform: "uppercase" }}>{tr("ERROR")}</span>
             )}
             <span style={{ flex: 1 }} />
             {reviewerOverlay.tokenUsage.inputTokens > 0 && (
@@ -687,7 +692,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.color = TERM_TEXT; }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = TERM_DIM; }}
-              >{"\u00d7"}</button>
+              >{trNode("\u00d7")}</button>
             )}
           </div>
 
@@ -750,8 +755,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                   letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500,
                   opacity: 0.8,
                 }}>
-                  reviewing
-                </span>
+                  {tr("reviewing")}</span>
               </div>
               {/* Corner brackets — decorative */}
               {[
@@ -787,8 +791,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                   }
                   return (
                     <div style={{ color: TERM_DIM, fontSize: TERM_SIZE, fontFamily: TERM_FONT, padding: "8px 0" }}>
-                      (No review content)
-                    </div>
+                      {tr("(No review content)")}</div>
                   );
                 })()}
                 <div ref={reviewChatEndRef} />
@@ -840,11 +843,10 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
               className={`scroll-pill${scrolledAway ? " visible" : ""}`}
               onClick={scrollToBottom}
               role="button"
-              aria-label="Scroll to bottom"
+              aria-label={tr("Scroll to bottom")}
             >
-              <span className="scroll-pill-arrow">{"\u2193"}</span>
-              new messages
-            </div>
+              <span className="scroll-pill-arrow">{trNode("\u2193")}</span>
+              {tr("new messages")}</div>
             {/* Floating Undo button — bottom-right of scroll area */}
             {!busy && isOwner && !teamId && !isTeamMember && !pendingMerge && (undoCount ?? 0) > 0 && onUndoMerge && (
               <button
@@ -860,7 +862,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                   fontSize: TERM_SIZE, cursor: "pointer",
                   fontFamily: TERM_FONT, zIndex: 2, borderRadius: 3, opacity: 0.85,
                 }}
-              ><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 6l4-4 4 4"/><path d="M6 2v8a4 4 0 0 0 4 4h2"/></svg>Undo ({undoCount})</button>
+              ><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 6l4-4 4 4"/><path d="M6 2v8a4 4 0 0 0 4 4h2"/></svg>{tr("Undo (")}{trNode(undoCount)})</button>
             )}
           </div>
 
@@ -871,10 +873,10 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
               backgroundColor: TERM_BG, maxHeight: 120, overflowY: "auto",
               boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03), 0 -2px 4px rgba(0,0,0,0.2)",
             }}>
-              <div style={{ fontSize: TERM_SIZE, color: TERM_DIM, fontFamily: TERM_FONT, marginBottom: 4, letterSpacing: "0.05em" }}>SUGGESTIONS</div>
+              <div style={{ fontSize: TERM_SIZE, color: TERM_DIM, fontFamily: TERM_FONT, marginBottom: 4, letterSpacing: "0.05em" }}>{tr("SUGGESTIONS")}</div>
               {suggestions.slice(-10).map((s, i) => (
                 <div key={i} style={{ fontSize: TERM_SIZE, color: TERM_TEXT, marginBottom: 2, lineHeight: 1.65, fontFamily: TERM_FONT }}>
-                  <span style={{ color: TERM_DIM }}>{s.author}:</span> {s.text}
+                  <span style={{ color: TERM_DIM }}>{trNode(s.author)}:</span> {s.text}
                 </div>
               ))}
             </div>
@@ -889,7 +891,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
             }}>
               {pendingImages.map((img, i) => (
                 <div key={i} style={{ position: "relative", display: "inline-block" }}>
-                  <img src={img.dataUrl} alt={img.name} style={{ height: 48, borderRadius: 4, border: `1px solid ${TERM_BORDER_DIM}` }} />
+                  <img src={img.dataUrl} alt={tr(img.name)} style={{ height: 48, borderRadius: 4, border: `1px solid ${TERM_BORDER_DIM}` }} />
                   <button
                     onClick={() => onPendingImagesChange(pendingImages.filter((_, j) => j !== i))}
                     style={{
@@ -899,12 +901,11 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                       fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                       padding: 0, lineHeight: 1,
                     }}
-                  >{"\u00d7"}</button>
+                  >{trNode("\u00d7")}</button>
                 </div>
               ))}
               <span style={{ fontSize: TERM_SIZE, color: TERM_DIM, fontFamily: TERM_FONT }}>
-                {pendingImages.length} image{pendingImages.length > 1 ? "s" : ""} attached
-              </span>
+                {trNode(pendingImages.length)} {tr("image")}{trNode(pendingImages.length > 1 ? "s" : "")} {tr("attached")}</span>
             </div>
           )}
 
@@ -915,9 +916,8 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
             // Spectator: read-only footer
             if (isSpectator) {
               return (
-                <div className="px-2.5 py-2 bg-muted shrink-0 font-mono text-term text-muted-foreground text-center shadow-[0_-3px_6px_-2px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.03)]">
-                  Watching — read-only mode
-                </div>
+                <div className="px-2.5 py-2 bg-muted shrink-0 font-mono text-term text-muted-foreground text-center shadow-[0_-3px_6px_-2px_rgba(52,73,57,0.08),inset_0_1px_0_rgba(255,255,255,0.03)]">
+                  {tr("Watching — read-only mode")}</div>
               );
             }
 
@@ -928,7 +928,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                   padding: "8px 10px",
                   background: TERM_PANEL,
                   flexShrink: 0,
-                  boxShadow: "0 -3px 6px -2px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03)",
+                  boxShadow: "0 -3px 6px -2px rgba(52,73,57,0.08), inset 0 1px 0 rgba(255,255,255,0.03)",
                 }}>
                   <div style={{ display: "flex", gap: 6 }}>
                     <textarea
@@ -936,7 +936,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                       value={suggestText}
                       onChange={(e) => { onSuggestTextChange(e.target.value); autoResize(e.currentTarget); }}
                       onKeyDown={(e) => isRealEnter(e) && (e.preventDefault(), onSuggest())}
-                      placeholder="Share an idea..."
+                      placeholder={tr("Share an idea...")}
                       maxLength={500}
                       style={{
                         flex: 1, padding: "6px 10px", border: `1px solid ${TERM_BORDER}`,
@@ -954,7 +954,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                         fontSize: TERM_SIZE, cursor: suggestText.trim() ? "pointer" : "default",
                         fontFamily: TERM_FONT,
                       }}
-                    >suggest</button>
+                    >{tr("suggest")}</button>
                   </div>
                 </div>
               );
@@ -965,7 +965,13 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
               <div className="term-input-area px-3 py-2 bg-term-panel shrink-0">
                 {isTeamMember ? (
                   <div className="text-center text-muted-foreground font-mono text-term py-2">
-                    Tasks are assigned by the Team Lead
+                    {pendingMerge && !busy && !autoMerge && onMerge && (
+                      <button className="term-btn mb-2" onClick={onMerge}
+                        style={{ color: TERM_GREEN, border: `1px solid ${TERM_GREEN}60`, padding: "5px 14px" }}>
+                        {tr("Merge")}
+                      </button>
+                    )}
+                    <div>{tr("Tasks are assigned by the Team Lead")}</div>
                   </div>
                 ) : cardPhase === "execute" ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -982,7 +988,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                           if (e.key === "Escape" && busy) { onCancel(); return; }
                           if (isRealEnter(e)) { e.preventDefault(); onSubmit(); }
                         }}
-                        placeholder={busy ? "esc stop \u00b7 type to continue" : ""}
+                        placeholder={tr(busy ? "esc stop \u00b7 type to continue" : "")}
                         style={{
                           flex: 1, padding: "6px 5px", border: "none",
                           backgroundColor: "transparent", color: TERM_TEXT_BRIGHT, fontSize: TERM_SIZE, outline: "none",
@@ -995,7 +1001,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                       <span
                         onClick={onEndProject}
                         style={{ padding: "2px 8px 4px", color: TERM_DIM, fontSize: 12, cursor: "pointer", fontFamily: TERM_FONT }}
-                      >close project</span>
+                      >{tr("close project")}</span>
                     )}
                   </div>
                 ) : cardPhase === "design" && !busy ? (
@@ -1008,7 +1014,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                         backgroundColor: "transparent", color: TERM_GREEN, fontSize: TERM_SIZE, cursor: "pointer",
                         fontFamily: TERM_FONT, flexShrink: 0,
                       }}
-                    >approve</button>
+                    >{tr("approve")}</button>
                     <div className="term-input-well" style={{ flex: 1 }}>
                     <span style={{ color: TERM_DIM, fontSize: TERM_SIZE, fontFamily: TERM_FONT, padding: "0 0 0 6px" }}>&gt;</span>
                     <textarea
@@ -1019,7 +1025,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                       onPaste={onPasteText}
                       onChange={(e) => { onPromptChange(e.target.value); autoResize(e.currentTarget); }}
                       onKeyDown={(e) => { if (isRealEnter(e)) { e.preventDefault(); onSubmit(); } }}
-                      placeholder="or give feedback..."
+                      placeholder={tr("or give feedback...")}
                       style={{
                         flex: 1, padding: "5px 6px", border: "none",
                         backgroundColor: "transparent", color: TERM_TEXT_BRIGHT, fontSize: TERM_SIZE, outline: "none",
@@ -1041,7 +1047,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                       onPaste={onPasteText}
                       onChange={(e) => { onPromptChange(e.target.value); autoResize(e.currentTarget); }}
                       onKeyDown={(e) => { if (isRealEnter(e)) { e.preventDefault(); onSubmit(); } }}
-                      placeholder="request changes..."
+                      placeholder={tr("request changes...")}
                       style={{
                         flex: 1, padding: "5px 6px", border: "none",
                         backgroundColor: "transparent", color: TERM_TEXT_BRIGHT, fontSize: TERM_SIZE, outline: "none",
@@ -1057,7 +1063,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                         backgroundColor: "transparent", color: TERM_SEM_YELLOW, fontSize: TERM_SIZE, cursor: "pointer",
                         fontFamily: TERM_FONT, flexShrink: 0,
                       }}
-                    >Close Project</button>
+                    >{tr("Close Project")}</button>
                   </div>
                 ) : !busy && isOwner && !teamId && !isTeamMember && pendingMerge ? (
                   <div style={{ display: "flex", gap: 6, alignItems: "center", padding: "4px 0" }}>
@@ -1071,7 +1077,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                           backgroundColor: "transparent", color: TERM_GREEN, fontSize: TERM_SIZE, cursor: "pointer",
                           fontFamily: TERM_FONT, flexShrink: 0,
                         }}
-                      ><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v6M4 3v10M4 13l4-4 4 0"/></svg>Merge</button>
+                      ><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v6M4 3v10M4 13l4-4 4 0"/></svg>{tr("Merge")}</button>
                     )}
                     {!autoMerge && onRevert && (
                       <button
@@ -1083,7 +1089,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                           backgroundColor: "transparent", color: TERM_SEM_YELLOW, fontSize: TERM_SIZE, cursor: "pointer",
                           fontFamily: TERM_FONT, flexShrink: 0,
                         }}
-                      ><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 6l4-4 4 4"/><path d="M6 2v8a4 4 0 0 0 4 4h2"/></svg>Revert</button>
+                      ><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 6l4-4 4 4"/><path d="M6 2v8a4 4 0 0 0 4 4h2"/></svg>{tr("Revert")}</button>
                     )}
                     <div className="term-input-well" style={{ flex: 1, display: "flex", alignItems: "center" }}>
                     <span style={{ color: TERM_DIM, fontSize: TERM_SIZE, fontFamily: TERM_FONT, padding: "0 0 0 8px", flexShrink: 0 }}>&gt;</span>
@@ -1095,7 +1101,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                       onPaste={onPasteText}
                       onChange={(e) => { onPromptChange(e.target.value); autoResize(e.currentTarget); }}
                       onKeyDown={(e) => { if (isRealEnter(e)) { e.preventDefault(); onSubmit(); } }}
-                      placeholder="send a new task..."
+                      placeholder={tr("send a new task...")}
                       style={{
                         flex: 1, padding: "5px 6px", border: "none",
                         backgroundColor: "transparent", color: TERM_TEXT_BRIGHT, fontSize: TERM_SIZE, outline: "none",
@@ -1115,7 +1121,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                         backgroundColor: "transparent", color: TERM_GREEN, fontSize: TERM_SIZE, cursor: "pointer",
                         fontFamily: TERM_FONT, flexShrink: 0,
                       }}
-                    >approve</button>
+                    >{tr("approve")}</button>
                     <div className="term-input-well" style={{ flex: 1 }}>
                     <span style={{ color: TERM_DIM, fontSize: TERM_SIZE, fontFamily: TERM_FONT, padding: "0 0 0 6px" }}>&gt;</span>
                     <textarea
@@ -1126,7 +1132,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                       onPaste={onPasteText}
                       onChange={(e) => { onPromptChange(e.target.value); autoResize(e.currentTarget); }}
                       onKeyDown={(e) => { if (isRealEnter(e)) { e.preventDefault(); onSubmit(); } }}
-                      placeholder="or give feedback..."
+                      placeholder={tr("or give feedback...")}
                       style={{
                         flex: 1, padding: "5px 6px", border: "none",
                         backgroundColor: "transparent", color: TERM_TEXT_BRIGHT, fontSize: TERM_SIZE, outline: "none",
@@ -1150,7 +1156,7 @@ const AgentPane = memo(function AgentPane(props: AgentPaneProps) {
                         if (e.key === "Escape" && busy) { onCancel(); return; }
                         if (isRealEnter(e)) { e.preventDefault(); onSubmit(); }
                       }}
-                      placeholder={busy ? "esc stop \u00b7 type to continue" : ""}
+                      placeholder={tr(busy ? "esc stop \u00b7 type to continue" : "")}
                       style={{
                         flex: 1, padding: "6px 5px", border: "none",
                         backgroundColor: "transparent", color: TERM_TEXT_BRIGHT, fontSize: TERM_SIZE, outline: "none",

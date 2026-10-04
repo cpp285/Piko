@@ -1,11 +1,13 @@
 [package]
-name = "open-office-desktop"
+name = "piko-desktop"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
-tauri-plugin-shell = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-window-state = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }

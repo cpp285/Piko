@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState, useEffect, useRef } from "react";
 import { TERM_DIM, TERM_BORDER_DIM, TERM_SEM_RED } from "./termTheme";
@@ -11,6 +13,7 @@ function TeamActivityLog({ messages, agents, assetsReady, onClear }: {
   assetsReady?: boolean;
   onClear?: () => void;
 }) {
+  useLocale();
   const [collapsed, setCollapsed] = useState(true);
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -24,7 +27,7 @@ function TeamActivityLog({ messages, agents, assetsReady, onClear }: {
 
   return (
     <div style={{
-      borderTop: "1px solid #152515",
+      borderTop: "1px solid var(--term-border)",
       padding: "6px 0",
     }}>
       <div
@@ -36,8 +39,8 @@ function TeamActivityLog({ messages, agents, assetsReady, onClear }: {
           cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
         }}
       >
-        <span style={{ width: 10, textAlign: "center" }}>{collapsed ? "\u25B6" : "\u25BC"}</span>
-        Activity ({messages.length})
+        <span style={{ width: 10, textAlign: "center" }}>{trNode(collapsed ? "\u25B6" : "\u25BC")}</span>
+        {tr("Activity (")}{trNode(messages.length)})
         {onClear && (
           <span
             onClick={(e) => { e.stopPropagation(); onClear(); }}
@@ -48,7 +51,7 @@ function TeamActivityLog({ messages, agents, assetsReady, onClear }: {
             }}
             onMouseEnter={(e) => { e.currentTarget.style.color = TERM_SEM_RED; e.currentTarget.style.borderColor = `${TERM_SEM_RED}80`; }}
             onMouseLeave={(e) => { e.currentTarget.style.color = TERM_DIM; e.currentTarget.style.borderColor = `${TERM_BORDER_DIM}80`; }}
-          >CLEAR</span>
+          >{tr("CLEAR")}</span>
         )}
       </div>
       {!collapsed && (

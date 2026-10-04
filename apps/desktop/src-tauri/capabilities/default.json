@@ -1,12 +1,11 @@
 {
   "identifier": "default",
-  "description": "Default capabilities for Open Office desktop",
-  "windows": ["main"],
+  "description": "Default capabilities for Piko desktop",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
-    "shell:allow-spawn",
-    "shell:allow-execute",
-    "shell:allow-stdin-write",
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",

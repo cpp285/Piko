@@ -1,28 +1,26 @@
+import DesktopBridge from "@/components/DesktopBridge";
+import AppPreferences from "@/components/AppPreferences";
 import type { Metadata } from "next";
 import "@/styles/global.css";
 import "@/components/office/ui/primitives/primitives.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export const metadata: Metadata = {
-  title: "Open Office",
-  description: "Control your AI agents from anywhere",
+  title: "Piko",
+  description: "在像素办公室中组织 AI 团队，通过网页与飞书协作",
   manifest: "/manifest.json",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <head>
-        <meta name="theme-color" content="#0a0a0b" />
+        <meta name="theme-color" content="#f5f7f2" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@300;400;500&family=Press+Start+2P&display=swap"
-          rel="stylesheet"
-        />
       </head>
-      <body style={{ margin: 0, backgroundColor: "#0a0a0b", color: "#e2e8f0", fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <body style={{ margin: 0, backgroundColor: "#f5f7f2", color: "#243a32", fontFamily: "var(--font-sans)" }}>
+        <AppPreferences />
+        <DesktopBridge />
         <TooltipProvider delayDuration={300} skipDelayDuration={100}>
         {children}
         </TooltipProvider>

@@ -1,4 +1,5 @@
-const CONNECTION_KEY = "office_connection";
+import "@/lib/migrate-storage";
+const CONNECTION_KEY = "piko_connection";
 
 export interface ConnectionInfo {
   mode: "ws" | "ably";

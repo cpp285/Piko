@@ -1,7 +1,9 @@
+import { readRuntimeEnv } from "@piko/shared/node";
 import { EventEmitter } from "events";
 import { existsSync } from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
+import { getTeamSpecialty } from "@piko/shared";
 import { CONFIG } from "./config.js";
 import { AgentSession, clearSessionId } from "./agent-session.js";
 import { AgentManager } from "./agent-manager.js";
@@ -35,6 +37,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
   private defaultBackendId: string;
   private workspace: string;
   private sandboxMode: "full" | "safe";
+  private getAgentPersona?: OrchestratorOptions["getAgentPersona"];
   private worktreeEnabled: boolean;
   private worktreeMerge: boolean;
   private worktreeAlwaysIsolate: boolean;
@@ -66,6 +69,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
   constructor(opts: OrchestratorOptions) {
     super();
     this.workspace = opts.workspace;
+    this.getAgentPersona = opts.getAgentPersona;
     this.sandboxMode = opts.sandboxMode ?? "full";
 
     // Worktree isolation
@@ -111,11 +115,13 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
   // ---------------------------------------------------------------------------
 
   createAgent(opts: CreateAgentOpts): void {
+    try { this.getAgentPersona?.(opts); }
+    catch { console.warn(`[Persona] Could not prepare ${opts.agentId}; the next task will report the file error.`); }
     const backend = this.backends.get(opts.backend ?? this.defaultBackendId)
       ?? this.backends.get(this.defaultBackendId)!;
 
     // Inject memory context for dev workers and leaders (not reviewers)
-    // Pass agentId so @bit-office/memory can include per-agent L2 facts + L3 shared knowledge
+    // Pass agentId so @piko/memory can include per-agent L2 facts + L3 shared knowledge
     const roleLower = opts.role.toLowerCase();
     const isReviewer = roleLower.includes("review");
     const memoryContext = !isReviewer ? getMemoryContext(opts.agentId) : "";
@@ -125,6 +131,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
       name: opts.name,
       role: opts.role,
       personality: opts.personality,
+      getPersona: this.getAgentPersona ? () => this.getAgentPersona!(opts) : undefined,
       workspace: opts.workDir ?? this.workspace,
       resumeHistory: opts.resumeHistory,
       backend,
@@ -268,7 +275,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
     // Worktree isolation: create a branch for each non-leader, non-reviewer agent.
     // When worktree is disabled, agents work directly in the designated directory on the current branch.
     // NOTE: Claude Code's native --worktree flag is incompatible with -p and --resume
-    // (causes exit code 1). All backends use managed worktrees (~/.open-office[-dev]/worktrees/) instead.
+    // (causes exit code 1). All backends use managed worktrees (~/.piko[-dev]/worktrees/) instead.
     this.setupWorktreeForAgent(agentId, taskId, repoPath ?? session.workspaceDir);
 
     session.runTask(taskId, prompt, repoPath, teamContext, true /* isUserInitiated */, opts?.phaseOverride);
@@ -322,14 +329,14 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
       if (!initGitRepo(base)) return;
     }
 
-    const instanceDir = process.env.BIT_OFFICE_INSTANCE_DIR;
+    const instanceDir = readRuntimeEnv("INSTANCE_DIR");
     const owner = instanceDir
       ? {
-        gatewayId: process.env.BIT_OFFICE_GATEWAY_ID ?? "unknown",
-        machineId: process.env.BIT_OFFICE_MACHINE_ID ?? "unknown",
+        gatewayId: readRuntimeEnv("GATEWAY_ID") ?? "unknown",
+        machineId: readRuntimeEnv("MACHINE_ID") ?? "unknown",
         instanceDir,
-        pid: Number(process.env.BIT_OFFICE_GATEWAY_PID) || process.pid,
-        startedAt: Number(process.env.BIT_OFFICE_GATEWAY_STARTED_AT) || Date.now(),
+        pid: Number(readRuntimeEnv("GATEWAY_PID")) || process.pid,
+        startedAt: Number(readRuntimeEnv("GATEWAY_STARTED_AT")) || Date.now(),
       }
       : undefined;
     const wt = createWorktree(base, agentId, session.name, owner);
@@ -356,33 +363,22 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
    * Merge all worker worktrees back to the main branch (called on team finalization).
    */
   private mergeAllWorkerWorktrees(leaderAgentId: string): void {
+    const teamId = this.agentManager.get(leaderAgentId)?.teamId;
+    if (!teamId) return;
     for (const session of this.agentManager.getAll()) {
       if (session.agentId === leaderAgentId) continue;
+      if (session.teamId !== teamId) continue;
       if (!session.worktreePath || !session.worktreeBranch) continue;
-      const result = mergeWorktree(session.workspaceDir, session.worktreePath, session.worktreeBranch, false, session.lastSummary ?? undefined, session.name, session.agentId);
-      this.emitEvent({
-        type: "worktree:merged",
-        agentId: session.agentId,
-        taskId: "finalize",
-        branch: session.worktreeBranch,
-        success: result.success,
-        conflictFiles: result.conflictFiles,
-        stagedFiles: result.stagedFiles,
-      });
-      if (!result.success) {
-        const conflictList = result.conflictFiles?.length
-          ? `: ${result.conflictFiles.join(", ")}`
-          : "";
+      session.pendingMerge = true;
+      if (session.autoMerge) {
+        // Keep the worktree alive: preview paths and follow-up fixes still use it.
+        this.mergeAgentWorktree(session.agentId);
+      }
+      if (session.pendingMerge) {
         this.emitEvent({
-          type: "team:chat",
-          fromAgentId: session.agentId,
-          message: `Merge conflict — ${session.name}'s changes could not be merged to main${conflictList}. Manual resolution needed.`,
-          messageType: "warning",
-          timestamp: Date.now(),
+          type: "worktree:ready", agentId: session.agentId, taskId: "finalize", branch: session.worktreeBranch,
         });
       }
-      session.worktreePath = null;
-      session.worktreeBranch = null;
     }
   }
 
@@ -558,7 +554,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
   /** Detect and set pendingMerge for agents whose worktree has unmerged changes (e.g. after restart) */
   detectPendingMerges(): void {
     for (const session of this.agentManager.getAll()) {
-      if (session.worktreePath && session.worktreeBranch && !session.teamId) {
+      if (session.worktreePath && session.worktreeBranch) {
         if (worktreeHasPendingChanges(session.workspaceDir, session.worktreePath)) {
           if (this.worktreeMerge && session.autoMerge) {
             // Auto-merge agents: merge immediately instead of showing pending UI
@@ -771,12 +767,8 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
    * Returns the team phase info, or null if no matching team.
    */
   approvePlan(leadAgentId: string): { teamId: string; phase: TeamPhase } | null {
-    // Capture the approved plan as originalTask
-    const approvedPlan = this.getLeaderLastOutput(leadAgentId);
-    if (approvedPlan) {
-      this.setOriginalTask(leadAgentId, approvedPlan);
-    }
-
+    // originalTask holds the latest complete plan, including after a gateway restart.
+    // A later conversational answer must not overwrite it when approval arrives.
     const info = this.phaseMachine.approvePlan(leadAgentId);
     if (!info) return null;
 
@@ -910,16 +902,13 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
     // Detect phase transitions on task completion
     if (event.type === "task:done") {
       // create → design: leader output contains [PLAN]
-      const resultText = (event.result?.summary ?? "") + (event.result?.fullOutput ?? "");
-      if (resultText) {
-        const phaseInfo = this.phaseMachine.checkPlanDetected(agentId, resultText);
+      const planOutput = event.result?.fullOutput || event.result?.summary || "";
+      if (/\[PLAN\][\s\S]*?\[\/PLAN\]/i.test(planOutput)) {
+        const phaseInfo = this.phaseMachine.checkPlanDetected(agentId, planOutput)
+          ?? (this.getTeamPhase(agentId) === "design" ? this.phaseMachine.getPhaseForLeader(agentId) : null);
         if (phaseInfo) {
-          // Capture the plan output as originalTask so design-phase feedback has context
-          const planOutput = event.result?.fullOutput ?? event.result?.summary ?? "";
-          if (planOutput) {
-            this.setOriginalTask(agentId, planOutput);
-            console.log(`[Orchestrator] Captured plan from create phase (${planOutput.length} chars) for design context`);
-          }
+          // Persist revisions as well as the first plan. Approval uses this exact version.
+          this.setOriginalTask(agentId, planOutput);
           this.emitEvent({ type: "team:phase", teamId: phaseInfo.teamId, phase: phaseInfo.phase, leadAgentId: phaseInfo.leadAgentId });
         }
       }
@@ -997,8 +986,7 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
       // Capture preview fields from dev workers (not reviewer, not leader).
       if (!this.agentManager.isTeamLead(agentId)) {
         const session = this.agentManager.get(agentId);
-        const role = session?.role?.toLowerCase() ?? "";
-        const isDevWorker = !role.includes("review");
+        const isDevWorker = !["review", "product", "design"].includes(getTeamSpecialty(session?.role ?? ""));
         if (isDevWorker && event.result && (event.result.previewUrl || event.result.entryFile || event.result.previewCmd)) {
           this.teamPreview = {
             previewUrl: event.result.previewUrl,
@@ -1091,7 +1079,8 @@ export class Orchestrator extends EventEmitter<OrchestratorEventMap> {
             messageType: "status",
             timestamp: Date.now(),
           });
-        } else if (!isResultTask && !this.delegationRouter.hasPendingFrom(agentId)) {
+        } else if (!isResultTask && !this.delegationRouter.hasPendingFrom(agentId)
+          && !["create", "design"].includes(this.getTeamPhase(agentId) ?? "")) {
           // Leader answered without delegating (e.g. user asked a question in execute phase).
           // Treat as conversational — mark as final so the frontend shows it.
           console.log(`[Orchestrator] Leader ${agentId} completed without delegations — treating as conversational reply`);

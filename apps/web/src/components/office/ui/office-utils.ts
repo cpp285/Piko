@@ -1,7 +1,9 @@
 import React from "react";
+import { normalizePreviewCommand } from "@piko/shared";
 import { sendCommand } from "@/lib/connection";
 import { getGatewayHttpUrl } from "@/lib/storage";
 import { TERM_TEXT } from "./termTheme";
+import { tr } from "@/lib/ui-language";
 
 // Check if Enter key is a real submit (not IME confirmation, not Shift/Ctrl+Enter newline)
 // Chrome: isComposing=true during IME; WKWebView (Tauri): keyCode=229 during IME
@@ -105,7 +107,7 @@ export function cleanPreviewField(v?: string): string | undefined {
 
 /** Build a SERVE_PREVIEW command from result fields */
 export function buildPreviewCommand(result: { previewPath?: string; previewCmd?: string; previewPort?: number; projectDir?: string; entryFile?: string }) {
-  const cmd = cleanPreviewField(result.previewCmd);
+  const cmd = normalizePreviewCommand(result.previewCmd);
   const entry = cleanPreviewField(result.entryFile);
   const previewPath = cleanPreviewField(result.previewPath);
   if (cmd && result.previewPort) {
@@ -134,20 +136,18 @@ export function formatTokenCount(n: number): string {
   return String(n);
 }
 
-const DONE_VERBS = ["Brewed", "Crafted", "Forged", "Compiled", "Shipped", "Deployed", "Hacked", "Rendered", "Built", "Cooked"];
 export function formatDuration(ms: number): string {
-  const verb = DONE_VERBS[Math.floor(ms / 1000) % DONE_VERBS.length];
   const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${verb} in ${sec}s`;
+  if (sec < 60) return tr(`Duration: ${sec} sec`);
   const min = Math.floor(sec / 60);
   const remSec = sec % 60;
-  return `${verb} for ${min}m ${remSec}s`;
+  return tr(`Duration: ${min} min ${remSec} sec`);
 }
 
 // ---------------------------------------------------------------------------
 // Random short agent name generator
 // ---------------------------------------------------------------------------
-const _SHORT_NAMES = ["Alex","Sam","Max","Leo","Mia","Kai","Zoe","Eli","Ava","Jay","Rio","Ash","Sky","Kit","Noa","Rex","Ivy","Ace","Ren","Jax","Finn","Luna","Cleo","Sage","Wren","Iris","Otto","Hugo","Theo","Lux","Pip","Dot","Val","Mae","Emi","Yuki","Sora","Riku","Nami","Hana"];
+const _SHORT_NAMES = ["陈峰", "李敏", "张伟", "林悦", "周宁", "赵凯", "许琳", "王欣", "刘洋", "杨帆", "吴昊", "孙悦", "郑佳", "何静", "徐磊", "高婷", "黄健", "胡可", "马俊", "朱妍", "罗明", "宋佳", "谢涛", "唐丽"];
 export function generateRandomName(): string {
   return _SHORT_NAMES[Math.floor(Math.random() * _SHORT_NAMES.length)];
 }

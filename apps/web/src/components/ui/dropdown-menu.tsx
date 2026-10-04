@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
@@ -16,7 +18,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
     inset?: boolean;
   }
->(({ className, inset, children, ...props }, ref) => (
+>(({ className, inset, children, ...props }, ref) => { useLocale(); return (
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
@@ -30,16 +32,16 @@ const DropdownMenuSubTrigger = React.forwardRef<
     )}
     {...props}
   >
-    {children}
-    <span className="ml-auto text-[10px] opacity-50">&#x25B8;</span>
+    {trNode(children)}
+    <span className="ml-auto text-[10px] opacity-50">{tr("&#x25B8;")}</span>
   </DropdownMenuPrimitive.SubTrigger>
-));
+); });
 DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
 
 const DropdownMenuSubContent = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.SubContent>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
->(({ className, ...props }, ref) => (
+>(({ className, ...props }, ref) => { useLocale(); return (
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
@@ -55,13 +57,13 @@ const DropdownMenuSubContent = React.forwardRef<
     )}
     {...props}
   />
-));
+); });
 DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayName;
 
 const DropdownMenuContent = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 4, ...props }, ref) => (
+>(({ className, sideOffset = 4, ...props }, ref) => { useLocale(); return (
   <DropdownMenuPrimitive.Portal>
     <DropdownMenuPrimitive.Content
       ref={ref}
@@ -80,7 +82,7 @@ const DropdownMenuContent = React.forwardRef<
       {...props}
     />
   </DropdownMenuPrimitive.Portal>
-));
+); });
 DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
 
 const DropdownMenuItem = React.forwardRef<
@@ -88,7 +90,7 @@ const DropdownMenuItem = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
     inset?: boolean;
   }
->(({ className, inset, ...props }, ref) => (
+>(({ className, inset, ...props }, ref) => { useLocale(); return (
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
@@ -102,7 +104,7 @@ const DropdownMenuItem = React.forwardRef<
     )}
     {...props}
   />
-));
+); });
 DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
 
 const DropdownMenuLabel = React.forwardRef<
@@ -110,7 +112,7 @@ const DropdownMenuLabel = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & {
     inset?: boolean;
   }
->(({ className, inset, ...props }, ref) => (
+>(({ className, inset, ...props }, ref) => { useLocale(); return (
   <DropdownMenuPrimitive.Label
     ref={ref}
     className={cn(
@@ -120,25 +122,26 @@ const DropdownMenuLabel = React.forwardRef<
     )}
     {...props}
   />
-));
+); });
 DropdownMenuLabel.displayName = DropdownMenuPrimitive.Label.displayName;
 
 const DropdownMenuSeparator = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.Separator>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
->(({ className, ...props }, ref) => (
+>(({ className, ...props }, ref) => { useLocale(); return (
   <DropdownMenuPrimitive.Separator
     ref={ref}
     className={cn("-mx-1 my-1 h-px bg-border", className)}
     {...props}
   />
-));
+); });
 DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName;
 
 const DropdownMenuShortcut = ({
   className,
   ...props
 }: React.HTMLAttributes<HTMLSpanElement>) => {
+  useLocale();
   return (
     <span
       className={cn(

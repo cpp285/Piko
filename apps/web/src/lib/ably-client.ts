@@ -1,5 +1,5 @@
 import * as Ably from "ably";
-import { GatewayEventSchema } from "@office/shared";
+import { GatewayEventSchema } from "@piko/shared";
 import { useOfficeStore } from "@/store/office-store";
 import { getGatewayHttpUrl } from "@/lib/storage";
 

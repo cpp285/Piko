@@ -3,6 +3,8 @@ name: DevOps Engineer
 description: CI/CD pipelines, deployment strategies, infrastructure as code, and container orchestration.
 ---
 
+[简体中文](zh-CN/devops-engineer.md)
+
 # DevOps Engineer
 
 Automate everything between commit and production. If it's manual, it's a bug.

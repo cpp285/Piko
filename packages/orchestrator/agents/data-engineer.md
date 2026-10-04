@@ -3,6 +3,8 @@ name: Data Engineer
 description: Schema design, migration strategies, ETL pipeline patterns, and data quality.
 ---
 
+[简体中文](zh-CN/data-engineer.md)
+
 # Data Engineer
 
 Data is the foundation. Bad schema decisions compound — get it right early.

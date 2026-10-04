@@ -7,7 +7,14 @@
 // ---------------------------------------------------------------------------
 
 import path from "path";
+import { normalizePreviewCommand } from "@piko/shared";
 import { CONFIG } from "./config.js";
+
+/** Team names can be Chinese or other Unicode names, with either colon style. */
+export function parseDelegationLine(line: string): { targetName: string; prompt: string } | null {
+  const match = line.match(/^\s*(?:[-*>]\s*)?(?:\*\*)?@([\p{L}\p{M}\p{N}_][\p{L}\p{M}\p{N}_ .'-]*?)(?:\*\*)?\s*[:：](?:\*\*)?\s*(.+)$/u);
+  return match ? { targetName: match[1].trim(), prompt: match[2].trim() } : null;
+}
 
 /** Parsed result from agent output */
 export interface ParsedResult {
@@ -30,7 +37,7 @@ export function parseAgentOutput(raw: string, fallbackText?: string | null): Par
 
   // Extract structured fields from worker output format
   const summaryMatch = text.match(/SUMMARY:\s*(.+)/i);
-  const filesMatch = text.match(/FILES_CHANGED:\s*(.+)/i);
+  const filesMatch = text.match(/FILES_CHANGED:[ \t]*([\s\S]*?)(?=\r?\n\s*(?:\*\*)?[A-Z_]+:[ \t]*|$)/i);
   const entryFileMatch = text.match(/ENTRY_FILE:\s*(.+)/i);
   const projectDirMatch = text.match(/PROJECT_DIR:\s*(.+)/i);
   const previewCmdMatch = text.match(/PREVIEW_CMD:\s*(.+)/i);
@@ -45,7 +52,7 @@ export function parseAgentOutput(raw: string, fallbackText?: string | null): Par
     const fileList = filesMatch[1].trim();
     for (const f of fileList.split(/[,\n]+/)) {
       const cleaned = stripMarkdown(f.trim().replace(/^[-*]\s*/, ""));
-      if (cleaned) changedFiles.push(cleaned);
+      if (cleaned && !/^(?:none|n\/?a|无)$/i.test(cleaned) && !changedFiles.includes(cleaned)) changedFiles.push(cleaned);
     }
   }
 
@@ -59,7 +66,7 @@ export function parseAgentOutput(raw: string, fallbackText?: string | null): Par
 
   const entryFile = isPlaceholder(rawEntry) ? undefined : stripMarkdown(rawEntry!);
   const projectDir = isPlaceholder(rawDir) ? undefined : stripMarkdown(rawDir!);
-  const previewCmd = isPlaceholder(rawCmd) ? undefined : stripMarkdown(rawCmd!);
+  const previewCmd = normalizePreviewCommand(rawCmd);
   const previewPort = previewPortMatch ? parseInt(previewPortMatch[1], 10) : undefined;
 
   if (summaryMatch) {
@@ -142,7 +149,6 @@ function extractNumberedList(raw: string, label: string): string[] {
  */
 function extractFallbackSummary(raw: string, _hasFiles: boolean, _entryFile?: string, _projectDir?: string): string {
   const lines = raw.split("\n").filter(l => l.trim());
-  const delegationRe = /^@(\w+):/;
   const noisePatterns = [
     /^STATUS:\s/i,
     /^FILES_CHANGED:\s/i,
@@ -157,9 +163,9 @@ function extractFallbackSummary(raw: string, _hasFiles: boolean, _entryFile?: st
   const meaningful: string[] = [];
   for (const l of lines) {
     const trimmed = l.trim();
-    const dm = trimmed.match(delegationRe);
+    const dm = parseDelegationLine(trimmed);
     if (dm) {
-      delegationTargets.push(dm[1]);
+      delegationTargets.push(dm.targetName);
     } else if (!noisePatterns.some(p => p.test(trimmed))) {
       meaningful.push(l);
     }

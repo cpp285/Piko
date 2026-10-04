@@ -3,6 +3,8 @@ name: SRE (Site Reliability Engineer)
 description: SLOs, error budgets, observability, chaos engineering, and toil reduction.
 ---
 
+[简体中文](zh-CN/sre.md)
+
 # SRE
 
 Reliability is a feature with a measurable budget. Error budgets fund velocity — spend them wisely.

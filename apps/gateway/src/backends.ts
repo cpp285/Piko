@@ -1,8 +1,10 @@
+import { readRuntimeEnv } from "@piko/shared/node";
 import { execSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
 import path from "path";
-import type { AIBackend } from "@bit-office/orchestrator";
+import type { AIBackend } from "@piko/orchestrator";
+import { resolveCodexRuntime } from "./codex-runtime.js";
 
 const isRoot = process.getuid?.() === 0;
 
@@ -41,6 +43,18 @@ function ensureClaudeSettingsForRoot() {
 ensureClaudeSettingsForRoot();
 
 const backends: AIBackend[] = [
+  {
+    id: "qwen", name: "Qwen Code（通义千问）", command: "qwen",
+    instructionPath: "QWEN.md", stability: "beta", guardType: "flag",
+    supportsResume: false, supportsAgentType: false,
+    supportsNativeWorktree: false, supportsStructuredOutput: false,
+    buildArgs(prompt, opts) {
+      const args = ["-p", prompt, "--output-format", "text", "--approval-mode", opts.noTools ? "plan" : opts.fullAccess ? "yolo" : "auto-edit"];
+      if (!opts.fullAccess) args.push("--sandbox");
+      if (opts.model) args.push("--model", opts.model);
+      return args;
+    },
+  },
   // ── Stable backends ───────────────────────────────────────────
   {
     id: "claude",
@@ -84,10 +98,18 @@ const backends: AIBackend[] = [
     supportsNativeWorktree: false,
     supportsStructuredOutput: false,
     buildArgs(prompt, opts) {
-      if (opts.fullAccess && !isRoot) {
-        return ["exec", prompt, "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check"];
+      const args = ["exec", prompt, "--skip-git-repo-check"];
+      if (opts.noTools) {
+        args.push("--sandbox", "read-only");
+      } else if (opts.fullAccess && !isRoot) {
+        args.push("--dangerously-bypass-approvals-and-sandbox");
+      } else {
+        args.push("--sandbox", "workspace-write");
       }
-      return ["exec", prompt, "--full-auto", "--skip-git-repo-check"];
+      // exec has no interactive approval UI. Deny actions outside the selected sandbox.
+      args.push("-c", 'approval_policy="never"');
+      if (opts.model) args.push("--model", opts.model);
+      return args;
     },
   },
 
@@ -271,6 +293,15 @@ export function detectBackends(): string[] {
   const detected: string[] = [];
   for (const backend of backends) {
     try {
+      if (backend.id === "codex") {
+        const runtime = resolveCodexRuntime();
+        if (runtime) {
+          backend.command = runtime.command;
+          console.log(`[backends] codex: ${runtime.version} → ${runtime.command}`);
+          detected.push(backend.id);
+          continue;
+        }
+      }
       const probe = VERSION_PROBES[backend.id];
       if (probe) {
         // Ambiguous name — run version probe to verify identity
@@ -289,7 +320,10 @@ export function detectBackends(): string[] {
         }
       } catch { /* keep relative command as fallback */ }
       detected.push(backend.id);
-    } catch {
+    } catch (error) {
+      if (backend.id === "codex" && readRuntimeEnv("CODEX_PATH")) {
+        throw error; // An explicit invalid override must not silently select another CLI/provider.
+      }
       // not installed or wrong binary
     }
   }

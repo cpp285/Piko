@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -27,13 +29,14 @@ export default function TermBadge({
   className,
   style,
 }: TermBadgeProps) {
+  useLocale();
   return (
     <Badge
       variant={variant as BadgeProps["variant"]}
       className={cn(className)}
       style={style}
     >
-      {children}
+      {trNode(children)}
     </Badge>
   );
 }

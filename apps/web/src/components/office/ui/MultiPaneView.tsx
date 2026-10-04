@@ -1,3 +1,5 @@
+"use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { ReviewerOverlayData } from "./AgentPane";
@@ -5,15 +7,15 @@ import { TERM_GREEN, TERM_BORDER_DIM, TERM_BORDER } from "./termTheme";
 
 import { cn } from "@/lib/utils";
 
-const AgentPane = dynamic(() => import("./AgentPane"), { ssr: false });
-const SpriteAvatar = dynamic(() => import("./SpriteAvatar"), { ssr: false });
+const AgentPane = dynamic(() => { return import("./AgentPane"); }, { ssr: false });
+const SpriteAvatar = dynamic(() => { return import("./SpriteAvatar"); }, { ssr: false });
 
 /** Grid layout defaults */
 const DEFAULT_COLS = 3;
 const DEFAULT_ROWS = 1;
 
 /** Per-pane wrapper that stabilizes callback references via useRef so AgentPane memo is effective */
-const StableAgentPane = memo(function StableAgentPane({
+export const StableAgentPane = memo(function StableAgentPane({
   agentId, data, meta, assetsReady,
   panePrompts, onPanePromptChange,
   isOwner, isCollaborator, isSpectator,
@@ -41,7 +43,7 @@ const StableAgentPane = memo(function StableAgentPane({
   suggestions: { text: string; author: string; timestamp: number }[];
   suggestText: string;
   onSuggestTextChange: (val: string) => void;
-  onSubmit: (agentId: string) => void;
+  onSubmit: (agentId: string) => void | Promise<void>;
   onCancel: (agentId: string) => void;
   onFire: (agentId: string) => void;
   onApproval: (approvalId: string, decision: "yes" | "no") => void;
@@ -70,6 +72,7 @@ const StableAgentPane = memo(function StableAgentPane({
   onUndoMerge?: (agentId: string) => void;
   scrollFrozen?: boolean;
 }) {
+  useLocale();
   // Stable callbacks — useRef + useCallback pattern avoids creating new references
   const idRef = useRef(agentId);
   idRef.current = agentId;
@@ -156,7 +159,7 @@ const StableAgentPane = memo(function StableAgentPane({
   );
 });
 
-interface AgentData {
+export interface AgentData {
   agentId: string;
   name: string;
   role?: string;
@@ -202,7 +205,7 @@ export interface MultiPaneViewProps {
   suggestions: { text: string; author: string; timestamp: number }[];
   suggestText: string;
   onSuggestTextChange: (val: string) => void;
-  onSubmit: (agentId: string) => void;
+  onSubmit: (agentId: string) => void | Promise<void>;
   onCancel: (agentId: string) => void;
   onFire: (agentId: string) => void;
   onApproval: (approvalId: string, decision: "yes" | "no") => void;
@@ -241,12 +244,14 @@ export interface MultiPaneViewProps {
   teamBusy?: boolean;
   onStopTeam?: () => void;
   onFireTeam?: () => void;
+  onAddTeamMembers?: () => void;
   /** Grid dimensions — configurable via Settings */
   cols?: number;
   rows?: number;
 }
 
 const MultiPaneView = memo(function MultiPaneView(props: MultiPaneViewProps) {
+  useLocale();
   const {
     openPanes,
     getAgentData,
@@ -295,6 +300,7 @@ const MultiPaneView = memo(function MultiPaneView(props: MultiPaneViewProps) {
     onUndoMerge,
     onStopTeam,
     onFireTeam,
+    onAddTeamMembers,
     onReorderPanes,
     cols: propCols,
     rows: propRows,
@@ -480,15 +486,16 @@ const MultiPaneView = memo(function MultiPaneView(props: MultiPaneViewProps) {
           position: "absolute", top: 38, right: 14, zIndex: 10,
           display: "flex", gap: 6, alignItems: "center",
         }}>
+          {onAddTeamMembers && <button onClick={onAddTeamMembers} className="tb tb-sm">{tr("Add Team Members")}</button>}
           {teamBusy && onStopTeam && (
-            <button onClick={onStopTeam} title="Stop Team" className="tb tb-sm" style={{
+            <button onClick={onStopTeam} title={tr("Stop Team")} className="tb tb-sm" style={{
               color: "var(--term-accent)", borderColor: "var(--term-accent)",
-            }}>stop</button>
+            }}>{tr("stop")}</button>
           )}
           {onFireTeam && (
-            <button onClick={onFireTeam} title="Fire Team" className="tb tb-sm" style={{
+            <button onClick={onFireTeam} title={tr("Fire Team")} className="tb tb-sm" style={{
               color: "var(--term-text)", borderColor: "var(--term-text)",
-            }}>fire team</button>
+            }}>{tr("fire team")}</button>
           )}
         </div>
       )}
@@ -599,12 +606,12 @@ const MultiPaneView = memo(function MultiPaneView(props: MultiPaneViewProps) {
               {pi === hireSlotIndex && onHire && (
                 <button
                   onClick={onHire}
-                  title={hireLabel}
-                  aria-label={hireLabel}
+                  title={tr(hireLabel)}
+                  aria-label={tr(hireLabel)}
                   className="mpv-placeholder-hire"
                 >
                   <span className="mpv-placeholder-hire-icon">+</span>
-                  <span className="mpv-placeholder-hire-label">{hireLabel}</span>
+                  <span className="mpv-placeholder-hire-label">{trNode(hireLabel)}</span>
                 </button>
               )}
 
@@ -614,7 +621,7 @@ const MultiPaneView = memo(function MultiPaneView(props: MultiPaneViewProps) {
       </div>
 
       {/* Bottom bar: page dots */}
-      <div className="term-info-bar flex justify-center items-center px-3 py-1.5 font-mono text-[11px] text-muted-foreground bg-term-panel shrink-0 relative gap-2 border-t border-term-border-dim shadow-[0_-3px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <div className="term-info-bar flex justify-center items-center px-3 py-1.5 font-mono text-[11px] text-muted-foreground bg-term-panel shrink-0 relative gap-2 border-t border-term-border-dim shadow-[0_-3px_8px_-2px_rgba(52,73,57,0.08),inset_0_1px_0_rgba(255,255,255,0.04)]">
 
         {/* Center: page indicator dots */}
         {totalPages > 1 && (
@@ -624,7 +631,7 @@ const MultiPaneView = memo(function MultiPaneView(props: MultiPaneViewProps) {
                 key={i}
                 className={`mpv-dot${currentPage === i ? " mpv-dot-active" : ""}`}
                 onClick={() => goToPage(i)}
-                aria-label={`Page ${i + 1}`}
+                aria-label={tr(`Page ${i + 1}`)}
               />
             ))}
           </div>

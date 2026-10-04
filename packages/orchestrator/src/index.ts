@@ -11,7 +11,7 @@ export { resolvePreview } from "./preview-resolver.js";
 export type { TemplateName } from "./prompt-templates.js";
 export type { PreviewInput, PreviewResult } from "./preview-resolver.js";
 export { RetryTracker } from "./retry.js";
-export { parseAgentOutput } from "./output-parser.js";
+export { parseAgentOutput, parseDelegationLine } from "./output-parser.js";
 export type { ParsedResult } from "./output-parser.js";
 export { CONFIG } from "./config.js";
 export { getMemoryContext, getMemoryStore, clearMemory, recordReviewFeedback, recordProjectCompletion, recordProjectRatings, recordTechPreference, commitSession, buildRecoveryContext, getRecoveryString, getAgentL0, getWorkState, updateWorkState, clearAgentWorkState, setStorageRoot } from "./memory.js";

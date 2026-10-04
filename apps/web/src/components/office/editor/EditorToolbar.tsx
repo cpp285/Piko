@@ -1,4 +1,6 @@
 "use client"
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { EditTool } from '../types'
@@ -65,6 +67,7 @@ function FloorPatternPreview({ patternIndex, color, selected, onClick }: {
   selected: boolean
   onClick: () => void
 }) {
+  useLocale();
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const displaySize = 32
   const tileZoom = 2
@@ -93,7 +96,7 @@ function FloorPatternPreview({ patternIndex, color, selected, onClick }: {
   return (
     <button
       onClick={onClick}
-      title={`Floor ${patternIndex}`}
+      title={tr(`Floor ${patternIndex}`)}
       style={{
         width: displaySize,
         height: displaySize,
@@ -118,9 +121,10 @@ function FloorPatternPreview({ patternIndex, color, selected, onClick }: {
 function ColorSlider({ label, value, min, max, onChange }: {
   label: string; value: number; min: number; max: number; onChange: (v: number) => void
 }) {
+  useLocale();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-      <span style={{ fontSize: '11px', color: '#999', width: 14, textAlign: 'right', flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: '11px', color: '#999', width: 14, textAlign: 'right', flexShrink: 0 }}>{trNode(label)}</span>
       <input
         type="range"
         min={min}
@@ -129,7 +133,7 @@ function ColorSlider({ label, value, min, max, onChange }: {
         onChange={(e) => onChange(Number(e.target.value))}
         style={{ flex: 1, height: 12, accentColor: 'rgba(90, 140, 255, 0.8)' }}
       />
-      <span style={{ fontSize: '11px', color: '#999', width: 28, textAlign: 'right', flexShrink: 0 }}>{value}</span>
+      <span style={{ fontSize: '11px', color: '#999', width: 28, textAlign: 'right', flexShrink: 0 }}>{trNode(value)}</span>
     </div>
   )
 }
@@ -151,6 +155,7 @@ export default function EditorToolbar({
   onSelectedFurnitureColorChange,
   onFurnitureTypeChange,
 }: EditorToolbarProps) {
+  useLocale();
   const [activeCategory, setActiveCategory] = useState<FurnitureCategory>('desks')
   const [showColor, setShowColor] = useState(false)
   const [showWallColor, setShowWallColor] = useState(false)
@@ -202,23 +207,23 @@ export default function EditorToolbar({
         <button
           style={isFloorActive ? activeBtnStyle : btnStyle}
           onClick={() => onToolChange(EditTool.TILE_PAINT)}
-          title="Paint floor tiles"
-        >Floor</button>
+          title={tr("Paint floor tiles")}
+        >{tr("Floor")}</button>
         <button
           style={isWallActive ? activeBtnStyle : btnStyle}
           onClick={() => onToolChange(EditTool.WALL_PAINT)}
-          title="Paint walls"
-        >Wall</button>
+          title={tr("Paint walls")}
+        >{tr("Wall")}</button>
         <button
           style={isEraseActive ? activeBtnStyle : btnStyle}
           onClick={() => onToolChange(EditTool.ERASE)}
-          title="Erase tiles to void"
-        >Erase</button>
+          title={tr("Erase tiles to void")}
+        >{tr("Erase")}</button>
         <button
           style={isFurnitureActive ? activeBtnStyle : btnStyle}
           onClick={() => onToolChange(EditTool.FURNITURE_PLACE)}
-          title="Place furniture"
-        >Furniture</button>
+          title={tr("Place furniture")}
+        >{tr("Furniture")}</button>
       </div>
 
       {/* Sub-panel: Floor tiles */}
@@ -228,13 +233,13 @@ export default function EditorToolbar({
             <button
               style={showColor ? activeBtnStyle : btnStyle}
               onClick={() => setShowColor((v) => !v)}
-              title="Adjust floor color"
-            >Color</button>
+              title={tr("Adjust floor color")}
+            >{tr("Color")}</button>
             <button
               style={activeTool === EditTool.EYEDROPPER ? activeBtnStyle : btnStyle}
               onClick={() => onToolChange(EditTool.EYEDROPPER)}
-              title="Pick floor pattern + color from existing tile"
-            >Pick</button>
+              title={tr("Pick floor pattern + color from existing tile")}
+            >{tr("Pick")}</button>
           </div>
 
           {showColor && (
@@ -242,10 +247,10 @@ export default function EditorToolbar({
               display: 'flex', flexDirection: 'column', gap: 3,
               padding: '4px 6px', background: '#181828', border: '1px solid var(--term-border)', borderRadius: 0,
             }}>
-              <ColorSlider label="H" value={floorColor.h} min={0} max={360} onChange={(v) => handleColorChange('h', v)} />
-              <ColorSlider label="S" value={floorColor.s} min={0} max={100} onChange={(v) => handleColorChange('s', v)} />
-              <ColorSlider label="B" value={floorColor.b} min={-100} max={100} onChange={(v) => handleColorChange('b', v)} />
-              <ColorSlider label="C" value={floorColor.c} min={-100} max={100} onChange={(v) => handleColorChange('c', v)} />
+              <ColorSlider label={tr("H")} value={floorColor.h} min={0} max={360} onChange={(v) => handleColorChange('h', v)} />
+              <ColorSlider label={tr("S")} value={floorColor.s} min={0} max={100} onChange={(v) => handleColorChange('s', v)} />
+              <ColorSlider label={tr("B")} value={floorColor.b} min={-100} max={100} onChange={(v) => handleColorChange('b', v)} />
+              <ColorSlider label={tr("C")} value={floorColor.c} min={-100} max={100} onChange={(v) => handleColorChange('c', v)} />
             </div>
           )}
 
@@ -270,8 +275,8 @@ export default function EditorToolbar({
             <button
               style={showWallColor ? activeBtnStyle : btnStyle}
               onClick={() => setShowWallColor((v) => !v)}
-              title="Adjust wall color"
-            >Color</button>
+              title={tr("Adjust wall color")}
+            >{tr("Color")}</button>
           </div>
 
           {showWallColor && (
@@ -279,10 +284,10 @@ export default function EditorToolbar({
               display: 'flex', flexDirection: 'column', gap: 3,
               padding: '4px 6px', background: '#181828', border: '1px solid var(--term-border)', borderRadius: 0,
             }}>
-              <ColorSlider label="H" value={wallColor.h} min={0} max={360} onChange={(v) => handleWallColorChange('h', v)} />
-              <ColorSlider label="S" value={wallColor.s} min={0} max={100} onChange={(v) => handleWallColorChange('s', v)} />
-              <ColorSlider label="B" value={wallColor.b} min={-100} max={100} onChange={(v) => handleWallColorChange('b', v)} />
-              <ColorSlider label="C" value={wallColor.c} min={-100} max={100} onChange={(v) => handleWallColorChange('c', v)} />
+              <ColorSlider label={tr("H")} value={wallColor.h} min={0} max={360} onChange={(v) => handleWallColorChange('h', v)} />
+              <ColorSlider label={tr("S")} value={wallColor.s} min={0} max={100} onChange={(v) => handleWallColorChange('s', v)} />
+              <ColorSlider label={tr("B")} value={wallColor.b} min={-100} max={100} onChange={(v) => handleWallColorChange('b', v)} />
+              <ColorSlider label={tr("C")} value={wallColor.c} min={-100} max={100} onChange={(v) => handleWallColorChange('c', v)} />
             </div>
           )}
         </div>
@@ -297,14 +302,14 @@ export default function EditorToolbar({
                 key={cat.id}
                 style={activeCategory === cat.id ? activeTabStyle : tabStyle}
                 onClick={() => setActiveCategory(cat.id)}
-              >{cat.label}</button>
+              >{trNode(cat.label)}</button>
             ))}
             <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.15)', margin: '0 2px', flexShrink: 0 }} />
             <button
               style={activeTool === EditTool.FURNITURE_PICK ? activeBtnStyle : btnStyle}
               onClick={() => onToolChange(EditTool.FURNITURE_PICK)}
-              title="Pick furniture type from placed item"
-            >Pick</button>
+              title={tr("Pick furniture type from placed item")}
+            >{tr("Pick")}</button>
           </div>
 
           <div style={{ display: 'flex', gap: 4, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 2 }}>
@@ -315,7 +320,7 @@ export default function EditorToolbar({
                 <button
                   key={entry.type}
                   onClick={() => onFurnitureTypeChange(entry.type)}
-                  title={entry.label}
+                  title={tr(entry.label)}
                   style={{
                     width: thumbSize,
                     height: thumbSize,
@@ -361,14 +366,14 @@ export default function EditorToolbar({
             <button
               style={showFurnitureColor ? activeBtnStyle : btnStyle}
               onClick={() => setShowFurnitureColor((v) => !v)}
-              title="Adjust selected furniture color"
-            >Color</button>
+              title={tr("Adjust selected furniture color")}
+            >{tr("Color")}</button>
             {selectedFurnitureColor && (
               <button
                 style={{ ...btnStyle, fontSize: '11px', padding: '2px 6px' }}
                 onClick={() => onSelectedFurnitureColorChange(null)}
-                title="Remove color (restore original)"
-              >Clear</button>
+                title={tr("Remove color (restore original)")}
+              >{tr("Clear")}</button>
             )}
           </div>
           {showFurnitureColor && (
@@ -378,17 +383,17 @@ export default function EditorToolbar({
             }}>
               {effectiveColor.colorize ? (
                 <>
-                  <ColorSlider label="H" value={effectiveColor.h} min={0} max={360} onChange={(v) => handleSelFurnColorChange('h', v)} />
-                  <ColorSlider label="S" value={effectiveColor.s} min={0} max={100} onChange={(v) => handleSelFurnColorChange('s', v)} />
+                  <ColorSlider label={tr("H")} value={effectiveColor.h} min={0} max={360} onChange={(v) => handleSelFurnColorChange('h', v)} />
+                  <ColorSlider label={tr("S")} value={effectiveColor.s} min={0} max={100} onChange={(v) => handleSelFurnColorChange('s', v)} />
                 </>
               ) : (
                 <>
-                  <ColorSlider label="H" value={effectiveColor.h} min={-180} max={180} onChange={(v) => handleSelFurnColorChange('h', v)} />
-                  <ColorSlider label="S" value={effectiveColor.s} min={-100} max={100} onChange={(v) => handleSelFurnColorChange('s', v)} />
+                  <ColorSlider label={tr("H")} value={effectiveColor.h} min={-180} max={180} onChange={(v) => handleSelFurnColorChange('h', v)} />
+                  <ColorSlider label={tr("S")} value={effectiveColor.s} min={-100} max={100} onChange={(v) => handleSelFurnColorChange('s', v)} />
                 </>
               )}
-              <ColorSlider label="B" value={effectiveColor.b} min={-100} max={100} onChange={(v) => handleSelFurnColorChange('b', v)} />
-              <ColorSlider label="C" value={effectiveColor.c} min={-100} max={100} onChange={(v) => handleSelFurnColorChange('c', v)} />
+              <ColorSlider label={tr("B")} value={effectiveColor.b} min={-100} max={100} onChange={(v) => handleSelFurnColorChange('b', v)} />
+              <ColorSlider label={tr("C")} value={effectiveColor.c} min={-100} max={100} onChange={(v) => handleSelFurnColorChange('c', v)} />
               <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '11px', color: '#999', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
@@ -396,8 +401,7 @@ export default function EditorToolbar({
                   onChange={(e) => onSelectedFurnitureColorChange({ ...effectiveColor, colorize: e.target.checked || undefined })}
                   style={{ accentColor: 'rgba(90, 140, 255, 0.8)' }}
                 />
-                Colorize
-              </label>
+                {tr("Colorize")}</label>
             </div>
           )}
         </div>

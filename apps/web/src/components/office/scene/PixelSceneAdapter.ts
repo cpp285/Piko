@@ -1,6 +1,6 @@
 import type { SceneAdapter, AgentInfo, BubbleType } from "./SceneAdapter";
 import type { OfficeState } from "../engine/officeState";
-import type { AgentStatus } from "@office/shared";
+import type { AgentStatus } from "@piko/shared";
 
 /**
  * Delegates SceneAdapter methods to the pixel-art OfficeState engine.

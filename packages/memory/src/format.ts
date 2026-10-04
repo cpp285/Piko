@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @bit-office/memory — Prompt formatting
+// @piko/memory — Prompt formatting
 //
 // Converts stored memory into text strings for injection into agent prompts.
 // Each formatter targets a specific use case with minimal token overhead.

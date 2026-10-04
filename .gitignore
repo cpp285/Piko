@@ -5,7 +5,6 @@ docs/Claude_Remote_Arcade_Full_Guide.md
 docs/Claude_Remote_Arcade_Key_Node_Supplement.md
 docs/plans/2026-02-24-claude-remote-arcade-design.md
 docs/plans/2026-02-24-claude-remote-arcade-plan.md
-CLAUDE.md
 .workspace
 .worktrees
 demo.mp4
@@ -27,3 +26,13 @@ node_modules/
 *.log
 .review-runtime/
 verification/
+apps/desktop/src-tauri/apps/
+dist/
+
+# Local machine files and private configuration
+.DS_Store
+.env.*
+!.env.example
+*.local
+.piko/
+.piko-dev/

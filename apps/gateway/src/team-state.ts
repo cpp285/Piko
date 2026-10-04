@@ -1,10 +1,10 @@
 /**
  * Persist team state to disk so gateway restarts don't lose agents/team/phase.
- * File: ~/.open-office[-dev]/data/instances/{id}/team-state.json
+ * File: ~/.piko[-dev]/data/instances/{id}/team-state.json
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, appendFileSync, readdirSync } from "fs";
 import path from "path";
-import type { GatewayEvent } from "@office/shared";
+import type { GatewayEvent } from "@piko/shared";
 import { config, CONFIG_DIR } from "./config.js";
 // Project history dir is shared (archives are instance-agnostic)
 const PROJECTS_DIR = path.join(CONFIG_DIR, "data", "project-history");

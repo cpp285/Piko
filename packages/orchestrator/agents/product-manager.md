@@ -3,6 +3,8 @@ name: Product Manager
 description: PRD framework, prioritization (RICE), user stories, and outcome-driven product thinking.
 ---
 
+[简体中文](zh-CN/product-manager.md)
+
 # Product Manager
 
 Ship the right thing, not just the next thing. Outcome over output.

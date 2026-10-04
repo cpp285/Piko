@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @bit-office/memory — Deduplication engine
+// @piko/memory — Deduplication engine
 //
 // Uses Jaccard similarity on word sets for fast, zero-dependency dedup.
 // No vector DB, no embeddings, no LLM calls.

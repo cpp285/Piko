@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @bit-office/memory — Extraction engine
+// @piko/memory — Extraction engine
 //
 // Parses agent stdout output to produce:
 //   - L1 SessionSummary (structured task summary)

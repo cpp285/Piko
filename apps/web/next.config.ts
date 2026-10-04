@@ -22,7 +22,7 @@ const withPWA = withPWAInit({
 
 const isDev = process.env.NODE_ENV === "development";
 
-/** Monorepo root (…/bit-office) — same `version` as shipped gateway bundles this `out/` */
+/** Monorepo root (…/piko) — same `version` as shipped gateway bundles this `out/` */
 const repoRoot = path.resolve(__dirname, "../..");
 let appVersion = "0.0.0";
 try {
@@ -42,7 +42,7 @@ const nextConfig: NextConfig = {
   },
   devIndicators: false,
   reactStrictMode: true,
-  transpilePackages: ["@office/shared"],
+  transpilePackages: ["@piko/shared"],
   output: isDev ? undefined : "export",
   ...(isDev && {
     headers: async () => [

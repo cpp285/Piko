@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
-// @bit-office/memory — File-based storage layer
+// @piko/memory — File-based storage layer
 //
-// All data lives under a configurable root directory (default ~/.open-office[-dev]/data/memory/).
+// All data lives under a configurable root directory (default ~/.piko[-dev]/data/memory/).
 // Layout:
 //   {root}/memory.json              — legacy project-level memory
 //   {root}/sessions/{agentId}.json  — L1 session history per agent
@@ -11,7 +11,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "fs";
 import path from "path";
-import { homedir } from "os";
+import { resolveHomeDataDir } from "@piko/shared/node";
 
 import type {
   SessionHistoryStore,
@@ -23,9 +23,7 @@ import type {
 
 /* ── Configurable root ──────────────────────────────────────────────────── */
 
-let _root = path.join(homedir(),
-  process.env.NODE_ENV === "development" ? ".open-office-dev" : ".open-office",
-  "data", "memory");
+let _root = path.join(resolveHomeDataDir(), "data", "memory");
 
 /** Override the storage root directory (call before any read/write). */
 export function setStorageRoot(dir: string): void {

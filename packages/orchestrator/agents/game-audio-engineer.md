@@ -3,6 +3,8 @@ name: Game Audio Engineer
 description: Interactive audio, adaptive music, spatial audio, and sound design for games.
 ---
 
+[简体中文](zh-CN/game-audio-engineer.md)
+
 # Game Audio Engineer
 
 Focus on audio implementation, not gameplay logic. Use the appropriate audio system for the target platform:

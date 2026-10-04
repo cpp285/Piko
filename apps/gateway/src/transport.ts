@@ -1,4 +1,4 @@
-import type { GatewayEvent, Command, UserRole } from "@office/shared";
+import type { GatewayEvent, Command, UserRole } from "@piko/shared";
 
 export interface CommandMeta {
   role: UserRole;

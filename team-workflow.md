@@ -1,6 +1,8 @@
-# Team Workflow
+# Piko Team Workflow
 
-This document contains all team-specific behavior used by Open Office.
+[简体中文](team-workflow.zh-CN.md)
+
+This document contains all team-specific behavior used by Piko.
 
 ## High-Level Flow
 
@@ -9,7 +11,9 @@ flowchart TD
     A([You]) --> B[Team Lead proposes plan]
     B --> C{Approve plan?}
     C -- Feedback --> B
-    C -- Yes --> D[Developer implements]
+    C -- Yes --> P[Product defines scope]
+    P --> V[Designer prepares UI]
+    V --> D[Developer implements]
     D --> E[Code Reviewer evaluates]
     E -- FAIL --> D
     E -- PASS --> F([Preview delivered])
@@ -35,6 +39,8 @@ flowchart TD
 | Role | Responsibility |
 |---|---|
 | Team Lead | Owns product direction, breaks work down, coordinates delegation |
+| Product Manager | Defines requirements, scope, and acceptance criteria |
+| UI Designer | Defines layout, visual system, and interaction |
 | Developer | Writes and updates code, runs builds/tests, integrates fixes |
 | Code Reviewer | Checks quality and requirement alignment, issues PASS/FAIL |
 
@@ -46,7 +52,7 @@ flowchart TD
 
 ## Preview Resolution
 
-When work is marked complete, Open Office tries to make output immediately viewable:
+When work is marked complete, Piko tries to make output immediately viewable:
 
 | Output type | Resolution behavior |
 |---|---|
@@ -58,14 +64,18 @@ When work is marked complete, Open Office tries to make output immediately viewa
 
 | Name | Team Role | Default profile |
 |---|---|---|
-| Marcus | Lead | Vision-first coordinator |
-| Leo | Developer | Action-first implementation |
-| Sophie | Reviewer | Careful code quality review |
-| Alex | Developer | Frontend focus |
-| Mia | Developer | Backend focus |
-| Kai | Developer | Game-dev focus |
+| 陈峰 | Lead | Planning and delegation |
+| 王欣 | Product Manager | Requirements and acceptance criteria |
+| 许琳 | UI Designer | Visual and interaction design |
+| 张伟 | Developer | General-purpose development |
+| 李敏 | Reviewer | Code quality review |
+| 林悦 | Developer | Frontend focus |
+| 周宁 | Developer | Backend focus |
+| 赵凯 | Developer | Rapid prototyping |
 
 ## Notes
 
 - Team behavior is orchestrated by `packages/orchestrator`.
 - Prompting, delegation, result finalization, and retry boundaries are handled in the orchestrator runtime.
+
+The default team includes lead, product manager, designer, developer, and reviewer. Members can be added later. Skip product/design steps when irrelevant or already complete; forward their deliverables and paths to downstream workers.

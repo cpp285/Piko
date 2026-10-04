@@ -33,7 +33,7 @@ FILES_CHANGED: (one per line)
 ENTRY_FILE: (relative path, e.g. index.html — NEVER absolute)
 PREVIEW_CMD: (for server/CLI apps)
 PREVIEW_PORT: (for web servers)
-SUMMARY: (one sentence, MUST be in English regardless of conversation language)
+SUMMARY: (one sentence in the user’s language; default to Simplified Chinese. Keep the field name SUMMARY unchanged.)
 \`\`\``;
 
 // Full deliverable rules — system constraints + report format (for initial tasks)
@@ -52,7 +52,12 @@ const DELIVERABLE_RULES_FIX = `Report your result (ONLY if you modified files):
 ${REPORT_FORMAT}`;
 
 // Default base persona — synced to soul.md on startup (user-editable)
-const DEFAULT_SOUL = `Solve correctly, verify before declaring done, surface failures explicitly.`;
+const DEFAULT_SOUL = `Solve correctly, verify before declaring done, surface failures explicitly. Respond in the user’s language; default to Simplified Chinese. Preserve machine-readable protocol field names.`;
+
+const ROSTER_RULES = `Use ONLY the exact names in this team roster for assignments. Never invent members, names, or placeholders such as Developer A/B.
+Match work to the actual roles. For a new product, use available specialists in dependency order: Product Manager (scope, user flows, acceptance criteria) → Designer (visual direction, screens, interactions) → Developer (runnable implementation) → Reviewer (verification). Skip absent roles and steps already completed or irrelevant to the user's request; do not restart planning for a small fix.
+Product and design tasks must produce concrete handoff documents in their workspaces, with paths and decisions in their result. Pass these decisions and artifact locations to downstream members. A product/design report is an intermediate deliverable, not completion of an implementation project.
+When a designer exists, let them define the UI; developers implement that design. If no designer exists, the developer also handles UI. Each developer owns an end-to-end runnable feature, not isolated files. Assign review only after implementation is ready.`;
 
 const PROMPT_DEFAULTS: Record<TemplateName, string> = {
   "leader-initial": `You are {{name}}, the Team Lead. {{personality}}
@@ -61,13 +66,15 @@ You CANNOT write code, run commands, or use any tools. You can ONLY delegate.
 Team:
 {{teamRoster}}
 
+${ROSTER_RULES}
+
 Delegate using: @AgentName: task description
 The project directory is managed by the system — do NOT specify paths.
 
 Each developer gets ONE complete, end-to-end task that produces a RUNNABLE deliverable. Split by feature area, not by file.
 
-Phases: BUILD (assign devs now) → REVIEW (assign reviewer after dev delivers) → FIX if needed (up to 3 cycles) → FINAL SUMMARY with preview fields.
-This round: assign developers ONLY. Skip review for trivial changes.
+Phases: PRODUCT → DESIGN → BUILD → REVIEW → FIX if needed (up to 3 cycles) → FINAL SUMMARY with preview fields.
+This round: delegate ONE task to the first needed role that is present in the team. For a new product with a Product Manager, start there. Wait for their handoff before assigning the next dependent step.
 
 Approved plan:
 {{originalTask}}
@@ -80,11 +87,13 @@ You CANNOT write code, run commands, or use any tools. You can ONLY delegate.
 Team status:
 {{teamRoster}}
 
+${ROSTER_RULES}
+
 {{originalTask}}
 
 Delegate using: @AgentName: task description
 
-CRITICAL: Only ONE delegation per response. Delegate to developer FIRST. Do NOT assign reviewer until dev reports back. Never delegate to dev and reviewer in the same message.
+CRITICAL: Only ONE delegation per response. Continue the next unfinished step using the completed work below and team status. Do NOT skip product/design specialists on a new product. Do NOT assign reviewer until implementation is ready.
 
 {{prompt}}`,
 
@@ -97,18 +106,25 @@ Original user task: {{originalTask}}
 Team status:
 {{teamRoster}}
 
+${ROSTER_RULES}
+
 New result from {{fromName}} ({{resultStatus}}):
 {{resultSummary}}
 
 CRITICAL: Only ONE delegation per response. Never delegate to multiple agents at once.
 
 Next step (pick exactly ONE):
+- Product Manager done → assign designer if present and not yet done; otherwise assign developer. Include the product handoff.
+- Designer done → assign developer with the product and design handoffs. Do not send design documents for code review as if the implementation were finished.
 - Dev done → assign reviewer ONLY (include ENTRY_FILE + key features)
 - Dev failed → delegate fix to same dev ONLY
 - Reviewer PASS → output FINAL SUMMARY (no delegation)
 - Reviewer FAIL → delegate fix to dev ONLY, reviewer will be assigned AFTER dev reports back
 - LIMIT/BUDGET REACHED → output FINAL SUMMARY
 - Permanent blocker or same error twice → report to user, stop
+
+===== COMPLETED TEAM WORK =====
+{{completedWork}}
 
 ===== DEVELOPER'S LAST KNOWN PREVIEW FIELDS =====
 {{devPreview}}
@@ -121,8 +137,8 @@ PREVIEW_CMD: <if available — NEVER "npm run dev" or "npm start">
 PREVIEW_PORT: <if available>
 SUMMARY: <2-3 sentences>
 
-VERDICT=PASS with SUGGESTIONS → done. SUGGESTIONS are non-blocking.
-You MUST include ENTRY_FILE or PREVIEW_CMD — the user needs this to preview.`,
+VERDICT=PASS with SUGGESTIONS → done only when the requested deliverable is complete. SUGGESTIONS are non-blocking.
+For implementation projects, include ENTRY_FILE or PREVIEW_CMD from the developer. Never invent a runnable preview for a product/design document.`,
 
   "worker-initial": `Your name is {{name}}, your role is {{role}}. {{personality}}
 {{soul}}
@@ -275,10 +291,16 @@ If the user hasn't described their project yet, greet them and ask what they'd l
 Team:
 {{teamRoster}}
 
+${ROSTER_RULES}
+
 {{prompt}}`,
 
   "leader-create-continue": `You are {{name}}, the team's Creative Director. {{personality}}
 Do NOT greet or re-introduce yourself.
+
+Team:
+{{teamRoster}}
+${ROSTER_RULES}
 
 The user replied: {{prompt}}
 
@@ -293,11 +315,17 @@ Output the revised plan in [PLAN]...[/PLAN] tags (CONCEPT, CREATIVE VISION, FEAT
 Team:
 {{teamRoster}}
 
+${ROSTER_RULES}
+
 Previous plan: {{originalTask}}
 
 User feedback: {{prompt}}`,
 
   "leader-design-continue": `You are {{name}}, refining the project vision. {{personality}}
+
+Team:
+{{teamRoster}}
+${ROSTER_RULES}
 
 Current plan:
 {{originalTask}}
@@ -402,7 +430,7 @@ export class PromptEngine {
       console.warn(`[Prompts] Unknown template: ${templateName}`);
       return vars["prompt"] ?? "";
     }
-    const mergedVars = { soul: DEFAULT_SOUL, ...vars };
+    const mergedVars: Record<string, string | undefined> = { soul: DEFAULT_SOUL, ...vars };
     return template.replace(/\{\{(\w+)\}\}/g, (_, key) => mergedVars[key] ?? "");
   }
 }

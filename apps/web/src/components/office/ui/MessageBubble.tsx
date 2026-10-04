@@ -1,8 +1,11 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState, useEffect, useRef, memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { localArtifactPath } from "@piko/shared";
 import { sendCommand } from "@/lib/connection";
 import type { ChatMessage } from "@/store/office-store";
 import { TERM_FONT, TERM_SIZE, TERM_GREEN, TERM_DIM, TERM_TEXT, TERM_TEXT_BRIGHT, TERM_ERROR, TERM_PANEL, TERM_SURFACE, TERM_BORDER, TERM_BORDER_DIM, TERM_SEM_GREEN, TERM_SEM_YELLOW, TERM_SEM_RED, TERM_SEM_BLUE, TERM_SEM_PURPLE } from "./termTheme";
@@ -11,6 +14,7 @@ import { BACKEND_OPTIONS } from "./office-constants";
 
 /** Typewriter reveal — adaptive speed: slow for small chunks, faster for large backlogs. */
 function TypewriterText({ text }: { text: string }) {
+  useLocale();
   const [revealed, setRevealed] = useState(0);
   const targetRef = useRef(text.length);
   const rafRef = useRef<number>(0);
@@ -46,6 +50,7 @@ function TypewriterText({ text }: { text: string }) {
 }
 
 function ThinkingBubble({ logLine }: { logLine: string | null }) {
+  useLocale();
   return (
     <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 8 }}>
       <div style={{
@@ -57,14 +62,15 @@ function ThinkingBubble({ logLine }: { logLine: string | null }) {
         whiteSpace: "pre-wrap", wordBreak: "break-word",
         opacity: 0.8,
       }}>
-        <span style={{ marginRight: 6, opacity: 0.5 }}>{">"}</span>
-        {logLine || "Thinking..."}
+        <span style={{ marginRight: 6, opacity: 0.5 }}>{trNode(">")}</span>
+        {trNode(logLine || "Thinking...")}
       </div>
     </div>
   );
 }
 
 function TokenBadge({ inputTokens, outputTokens }: { inputTokens: number; outputTokens: number }) {
+  useLocale();
   if (inputTokens === 0 && outputTokens === 0) return null;
   return (
     <span style={{
@@ -72,14 +78,15 @@ function TokenBadge({ inputTokens, outputTokens }: { inputTokens: number; output
       color: TERM_TEXT, fontFamily: TERM_FONT,
       whiteSpace: "nowrap", opacity: 0.55,
       fontVariantNumeric: "tabular-nums",
-    }} title={`Input: ${inputTokens.toLocaleString()} / Output: ${outputTokens.toLocaleString()}`}>
-      {"\u2191"}{formatTokenCount(inputTokens)} {"\u2193"}{formatTokenCount(outputTokens)}
+    }} title={tr(`Input: ${inputTokens.toLocaleString()} / Output: ${outputTokens.toLocaleString()}`)}>
+      {trNode("\u2191")}{trNode(formatTokenCount(inputTokens))} {trNode("\u2193")}{trNode(formatTokenCount(outputTokens))}
     </span>
   );
 }
 
 /** Render diff-highlighted lines for code blocks with language "diff" */
 function DiffHighlightedCode({ text }: { text: string }) {
+  useLocale();
   return (
     <>
       {text.split("\n").map((line, i) => {
@@ -90,7 +97,7 @@ function DiffHighlightedCode({ text }: { text: string }) {
         else if (line.startsWith("@@")) { color = TERM_DIM; }
         return (
           <span key={i} style={{ display: "block", color, backgroundColor: bg, padding: "0 6px", margin: "0 -6px", borderRadius: 1 }}>
-            {line}
+            {trNode(line)}
           </span>
         );
       })}
@@ -100,12 +107,12 @@ function DiffHighlightedCode({ text }: { text: string }) {
 
 const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
   p({ children }) {
-    return <div style={{ marginBottom: 8 }}>{children}</div>;
+    return <div style={{ marginBottom: 8 }}>{trNode(children)}</div>;
   },
   pre({ children }) {
     return (
       <div style={{ overflowX: "auto", margin: "8px 0", WebkitOverflowScrolling: "touch" }}>
-        {children}
+        {trNode(children)}
       </div>
     );
   },
@@ -155,39 +162,54 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
   table({ children }) {
     return (
       <div style={{ overflowX: "auto", margin: "8px 0", WebkitOverflowScrolling: "touch" }}>
-        <table style={{ borderCollapse: "collapse", width: "100%" }}>{children}</table>
+        <table style={{ borderCollapse: "collapse", width: "100%" }}>{trNode(children)}</table>
       </div>
     );
   },
   a({ href, children }) {
-    return <a href={href} target="_blank" rel="noopener noreferrer" style={{ wordBreak: "break-all" }}>{children}</a>;
+    return <a href={href} target="_blank" rel="noopener noreferrer" style={{ wordBreak: "break-all" }}>{trNode(children)}</a>;
   },
 };
 
-const MdContent = memo(function MdContent({ text }: { text: string }) {
+const MdContent = memo(function MdContent({ text, onPreview }: { text: string; onPreview?: (url: string) => void }) {
+  useLocale();
   return (
-    <ReactMarkdown urlTransform={(url) => url} remarkPlugins={[remarkGfm]} components={mdComponents}>
+    <ReactMarkdown urlTransform={(url) => url} remarkPlugins={[remarkGfm]} components={{ ...mdComponents,
+      a({ href, children }) {
+        const filePath = localArtifactPath(href);
+        if (!filePath) return <a href={href} target="_blank" rel="noopener noreferrer" style={{ wordBreak: "break-all" }}>{children}</a>;
+        return <a href="#" onClick={event => {
+          event.preventDefault();
+          if (/\.html?$/i.test(filePath) && onPreview) {
+            sendCommand({ type: "SERVE_PREVIEW", filePath });
+            const url = computePreviewUrl({ previewPath: filePath });
+            if (url) onPreview(url);
+          } else sendCommand({ type: "OPEN_FILE", path: filePath });
+        }} style={{ wordBreak: "break-all" }}>{children}</a>;
+      },
+    }}>
       {text.replace(/(https?:\/\/[^\s)>\]]+)/g, '[$1]($1)')}
     </ReactMarkdown>
   );
 });
 
 export function SysMsg({ ts, tag, text, firstLine, isLong, isError }: { ts: string; tag: string; text: string; firstLine: string; isLong: boolean; isError?: boolean }) {
+  useLocale();
   const [expanded, setExpanded] = useState(false);
   const textColor = isError ? TERM_ERROR : TERM_DIM;
   return (
     <div className="term-msg" style={{ marginBottom: 2, fontSize: TERM_SIZE, fontFamily: TERM_FONT, lineHeight: 1.7, color: TERM_DIM, padding: "1px 0" }}>
-      <span className="term-ts" style={{ color: TERM_DIM, marginRight: 6 }}>{ts}</span>
+      <span className="term-ts" style={{ color: TERM_DIM, marginRight: 6 }}>{trNode(ts)}</span>
       {isLong && (
         <span
           onClick={() => setExpanded(!expanded)}
           style={{ color: isError ? TERM_ERROR : TERM_DIM, cursor: "pointer", marginRight: 4 }}
-        >{expanded ? "\u25BE" : "\u25B8"}</span>
+        >{trNode(expanded ? "\u25BE" : "\u25B8")}</span>
       )}
-      <span style={{ color: isError ? TERM_ERROR : TERM_DIM, marginRight: 6 }}>{tag}</span>
+      <span style={{ color: isError ? TERM_ERROR : TERM_DIM, marginRight: 6 }}>{trNode(tag)}</span>
       <span style={{ color: textColor, wordBreak: "break-word" }} className="chat-markdown">
         {isLong && !expanded
-          ? <span>{firstLine}</span>
+          ? <span>{trNode(firstLine)}</span>
           : <MdContent text={text} />
         }
       </span>
@@ -201,6 +223,7 @@ function ReviewButton({ result, onReview, detectedBackends }: {
   onReview: (result: NonNullable<ChatMessage["result"]>, backend?: string) => void;
   detectedBackends: string[];
 }) {
+  useLocale();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -219,16 +242,15 @@ function ReviewButton({ result, onReview, detectedBackends }: {
         className="term-btn"
         onClick={() => setOpen(!open)}
         style={reviewBtnStyle}
-      >review {open ? "\u25B4" : "\u25BE"}</button>
+      >{tr("review")}{trNode(open ? "\u25B4" : "\u25BE")}</button>
       {open && (
         <div style={{
           position: "absolute", bottom: "100%", left: 0, marginBottom: 4, zIndex: 50,
           backgroundColor: TERM_PANEL, border: `1px solid ${TERM_BORDER}`,
-          minWidth: 150, boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+          minWidth: 150, boxShadow: "0 4px 12px rgba(52,73,57,0.08)",
         }}>
           <div style={{ padding: "4px 8px", color: TERM_DIM, fontFamily: TERM_FONT, fontSize: TERM_SIZE, letterSpacing: "0.05em", borderBottom: `1px solid ${TERM_BORDER}` }}>
-            SELECT AI
-          </div>
+            {tr("SELECT AI")}</div>
           {BACKEND_OPTIONS.map((b) => {
             const available = detectedBackends.length === 0 || detectedBackends.includes(b.id);
             return (
@@ -253,7 +275,7 @@ function ReviewButton({ result, onReview, detectedBackends }: {
                   backgroundColor: available ? TERM_SEM_GREEN : TERM_DIM,
                   flexShrink: 0,
                 }} />
-                <span>{b.name}</span>
+                <span>{trNode(b.name)}</span>
               </button>
             );
           })}
@@ -283,6 +305,7 @@ const reviewBtnStyle: React.CSSProperties = {
 };
 
 const MessageBubble = memo(function MessageBubble({ msg, agentName, onPreview, onReview, isTeamLead, isTeamMember, teamPhase, detectedBackends }: { msg: ChatMessage; agentName?: string; onPreview?: (url: string) => void; onReview?: (result: NonNullable<ChatMessage["result"]>, backend?: string) => void; isTeamLead?: boolean; isTeamMember?: boolean; teamPhase?: string | null; detectedBackends?: string[] }) {
+  useLocale();
   const ts = new Date(msg.timestamp).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const base: React.CSSProperties = { marginBottom: 4, fontSize: TERM_SIZE, fontFamily: TERM_FONT, lineHeight: 1.7 };
 
@@ -298,7 +321,7 @@ const MessageBubble = memo(function MessageBubble({ msg, agentName, onPreview, o
         borderLeft: `2px solid ${TERM_BORDER}`,
         padding: "6px 12px",
       }}>
-        <span className="term-ts" style={{ color: TERM_DIM, marginRight: 6 }}>{ts}</span>
+        <span className="term-ts" style={{ color: TERM_DIM, marginRight: 6 }}>{trNode(ts)}</span>
         <span style={{ color: TERM_GREEN, opacity: 0.7 }}>&gt; </span>
         <span style={{ color: TERM_TEXT, wordBreak: "break-word" }}>{linkifyText(msg.text)}</span>
       </div>
@@ -320,35 +343,35 @@ const MessageBubble = memo(function MessageBubble({ msg, agentName, onPreview, o
   // ── Agent ──
   const isStreaming = msg.id.endsWith("-stream");
   const hasFullOutput = !!(msg.result?.fullOutput && msg.result.fullOutput !== msg.text && msg.result.fullOutput.length > msg.text.length + 20);
-  const planMatch = msg.text.match(/\[PLAN\]([\s\S]*?)\[\/PLAN\]/i);
-  const planContent = planMatch?.[1]?.trim();
-  const textWithoutPlan = planContent ? msg.text.replace(/\[PLAN\][\s\S]*?\[\/PLAN\]/i, "").trim() : null;
   const displayText = hasFullOutput ? (msg.result?.fullOutput ?? msg.text) : msg.text;
+  const planMatch = displayText.match(/\[PLAN\]([\s\S]*?)\[\/PLAN\]/i);
+  const planContent = planMatch?.[1]?.trim();
+  const textWithoutPlan = planContent ? displayText.replace(/\[PLAN\][\s\S]*?\[\/PLAN\]/i, "").trim() : null;
 
   // Streaming message
   if (isStreaming) {
     if (!msg.text) {
       return (
         <div style={{ ...base, padding: "2px 0" }}>
-          <span className="term-ts" style={{ color: TERM_DIM, marginRight: 6 }}>{ts}</span>
-          <span style={{ color: TERM_DIM }}>{agentName ?? "agent"}</span>
+          <span className="term-ts" style={{ color: TERM_DIM, marginRight: 6 }}>{trNode(ts)}</span>
+          <span style={{ color: TERM_DIM }}>{trNode(agentName ?? "agent")}</span>
           <span style={{ color: TERM_DIM, marginLeft: 8 }} className="working-dots"><span className="working-dots-mid" /></span>
         </div>
       );
     }
     return (
       <div style={{ ...base, padding: "2px 0" }}>
-        <span className="term-ts" style={{ color: TERM_DIM, marginRight: 6 }}>{ts}</span>
-        <span style={{ color: TERM_DIM }}>{agentName ?? "agent"}</span>
+        <span className="term-ts" style={{ color: TERM_DIM, marginRight: 6 }}>{trNode(ts)}</span>
+        <span style={{ color: TERM_DIM }}>{trNode(agentName ?? "agent")}</span>
         <div style={{ marginTop: 2, color: TERM_TEXT, wordBreak: "break-word" }} className="chat-markdown">
-          <MdContent text={msg.text} />
+          <MdContent text={msg.text} onPreview={onPreview} />
         </div>
       </div>
     );
   }
 
   // Completion (team lead final result)
-  if (isTeamLead && msg.isFinalResult && msg.result) {
+  if (isTeamLead && msg.isFinalResult && msg.result && !/\[PLAN\]/i.test(displayText)) {
     const r = msg.result;
     const cleanSummary = r.summary.replace(/ENTRY_FILE:\s*.+/gi, "").replace(/PROJECT_DIR:\s*.+/gi, "").replace(/SUMMARY:\s*/gi, "").trim();
     const entryFile = r.entryFile ?? r.summary.match(/ENTRY_FILE:\s*(.+)/i)?.[1]?.trim();
@@ -357,23 +380,23 @@ const MessageBubble = memo(function MessageBubble({ msg, agentName, onPreview, o
     return (
       <div className="term-msg" style={{ ...base, marginTop: 10, borderTop: `1px solid ${TERM_BORDER_DIM}`, paddingTop: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-          <span className="term-ts" style={{ color: TERM_DIM }}>{ts}</span>
-          <span style={{ color: TERM_SEM_GREEN }}>done</span>
+          <span className="term-ts" style={{ color: TERM_DIM }}>{trNode(ts)}</span>
+          <span style={{ color: TERM_SEM_GREEN }}>{tr("done")}</span>
           {msg.durationMs && msg.durationMs > 1000 && (
             <span style={{ color: TERM_DIM, fontFamily: TERM_FONT }}>{formatDuration(msg.durationMs)}</span>
           )}
         </div>
-        <div style={{ color: TERM_TEXT, wordBreak: "break-word" }} className="chat-markdown"><MdContent text={cleanSummary || "completed."} /></div>
+        <div style={{ color: TERM_TEXT, wordBreak: "break-word" }} className="chat-markdown"><MdContent text={cleanSummary || "completed."} onPreview={onPreview} /></div>
         {(projectDir || entryFile) && (
           <div style={{ color: TERM_DIM, marginTop: 4, display: "flex", gap: 8, alignItems: "center" }}>
-            {projectDir && <span className="term-path-scroll">{projectDir}</span>}
-            {entryFile && <span onClick={() => sendCommand({ type: "OPEN_FILE", path: entryFile })} style={{ cursor: "pointer", color: TERM_GREEN }}>{entryFile}</span>}
+            {projectDir && <span className="term-path-scroll">{trNode(projectDir)}</span>}
+            {entryFile && <span onClick={() => sendCommand({ type: "OPEN_FILE", path: entryFile })} style={{ cursor: "pointer", color: TERM_GREEN }}>{trNode(entryFile)}</span>}
           </div>
         )}
-        {changedFiles.length > 0 && <div style={{ color: TERM_DIM, marginTop: 2 }}>{changedFiles.length} files changed</div>}
+        {changedFiles.length > 0 && <div style={{ color: TERM_DIM, marginTop: 2 }}>{changedFiles.length} {tr("files changed")}</div>}
         <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
-          {hasWebPreview(r) && onPreview && <button className="term-btn" onClick={() => { const cmd = buildPreviewCommand(r); if (cmd) sendCommand(cmd); const url = computePreviewUrl(r); if (url) onPreview(url); }} style={previewBtnStyle}>preview</button>}
-          {!hasWebPreview(r) && buildPreviewCommand(r) && <button className="term-btn" onClick={() => { const cmd = buildPreviewCommand(r); if (cmd) sendCommand(cmd); }} style={previewBtnStyle}>launch</button>}
+          {hasWebPreview(r) && onPreview && <button className="term-btn" onClick={() => { const cmd = buildPreviewCommand(r); if (cmd) sendCommand(cmd); const url = computePreviewUrl(r); if (url) onPreview(url); }} style={previewBtnStyle}>{tr("preview")}</button>}
+          {!hasWebPreview(r) && buildPreviewCommand(r) && <button className="term-btn" onClick={() => { const cmd = buildPreviewCommand(r); if (cmd) sendCommand(cmd); }} style={previewBtnStyle}>{tr("launch")}</button>}
         </div>
       </div>
     );
@@ -383,28 +406,28 @@ const MessageBubble = memo(function MessageBubble({ msg, agentName, onPreview, o
   return (
     <div className="term-msg" style={{ ...base, paddingTop: 8, marginTop: 6 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <span className="term-ts" style={{ color: TERM_DIM }}>{ts}</span>
-        <span style={{ color: TERM_DIM }}>{agentName ?? "agent"}</span>
+        <span className="term-ts" style={{ color: TERM_DIM }}>{trNode(ts)}</span>
+        <span style={{ color: TERM_DIM }}>{trNode(agentName ?? "agent")}</span>
       </div>
       <div style={{ color: TERM_TEXT, wordBreak: "break-word" }} className="chat-markdown">
         {planContent ? (
           <>
             {textWithoutPlan && <div className="chat-markdown"><MdContent text={textWithoutPlan} /></div>}
             <div style={{ marginTop: 6, paddingLeft: 12, borderLeft: `2px solid ${TERM_BORDER}` }}>
-              <div style={{ color: TERM_DIM, marginBottom: 4, letterSpacing: "0.04em" }}>PLAN</div>
+              <div style={{ color: TERM_DIM, marginBottom: 4, letterSpacing: "0.04em" }}>{tr("PLAN")}</div>
               <div className="chat-markdown"><MdContent text={planContent!} /></div>
             </div>
           </>
         ) : (
-          <MdContent text={displayText} />
+          <MdContent text={displayText} onPreview={onPreview} />
         )}
         {msg.result && msg.result.changedFiles.length > 0 && !planContent && (
-          <div style={{ color: TERM_DIM, marginTop: 4 }}>{msg.result.changedFiles.length} files: {msg.result.changedFiles.slice(0, 3).join(", ")}{msg.result.changedFiles.length > 3 ? ` +${msg.result.changedFiles.length - 3}` : ""}</div>
+          <div style={{ color: TERM_DIM, marginTop: 4 }}>{msg.result.changedFiles.length} {tr("files:")}{msg.result.changedFiles.slice(0, 3).join(", ")}{msg.result.changedFiles.length > 3 ? ` +${msg.result.changedFiles.length - 3}` : ""}</div>
         )}
         {msg.result && !isTeamMember && !isTeamLead && (hasWebPreview(msg.result) || (onReview && msg.result.changedFiles.length > 0)) && (
           <div style={{ display: "flex", gap: 4, marginTop: 8, alignItems: "center" }}>
             {hasWebPreview(msg.result) && onPreview && (
-              <button className="term-btn" onClick={() => { const r = msg.result!; const cmd = buildPreviewCommand(r); if (cmd) sendCommand(cmd); const url = computePreviewUrl(r); if (url) onPreview(url); }} style={previewBtnStyle}>preview</button>
+              <button className="term-btn" onClick={() => { const r = msg.result!; const cmd = buildPreviewCommand(r); if (cmd) sendCommand(cmd); const url = computePreviewUrl(r); if (url) onPreview(url); }} style={previewBtnStyle}>{tr("preview")}</button>
             )}
             {onReview && msg.result.changedFiles.length > 0 && (
               <ReviewButton result={msg.result} onReview={onReview} detectedBackends={detectedBackends ?? []} />

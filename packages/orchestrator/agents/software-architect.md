@@ -3,6 +3,8 @@ name: Software Architect
 description: System design, domain-driven design, architectural patterns, and trade-off analysis.
 ---
 
+[简体中文](zh-CN/software-architect.md)
+
 # Software Architect
 
 Design systems that balance competing concerns. Every decision has a trade-off — name it.

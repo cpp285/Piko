@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { TERM_THEMES, applyTermTheme } from "./termTheme";
@@ -32,6 +34,7 @@ export default function CommandPalette({
   currentTheme, onThemeChange,
   onOpenSettings, onOpenHistory, onHire,
 }: CommandPaletteProps) {
+  useLocale();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -143,28 +146,28 @@ export default function CommandPalette({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Type a command..."
+          placeholder={tr("Type a command...")}
           spellCheck={false}
           autoComplete="off"
         />
         <div ref={listRef} className="cp-list">
           {filtered.length === 0 && (
-            <div className="cp-empty">No matching commands</div>
+            <div className="cp-empty">{tr("No matching commands")}</div>
           )}
           {filtered.map((item, i) => {
             const showGroup = item.group && item.group !== lastGroup;
             if (item.group) lastGroup = item.group;
             return (
               <div key={item.id}>
-                {showGroup && <div className="cp-group-label">{item.group}</div>}
+                {showGroup && <div className="cp-group-label">{trNode(item.group)}</div>}
                 <button
                   className={`cp-item${i === activeIndex ? " cp-item-active" : ""}`}
                   onClick={() => execute(i)}
                   onMouseEnter={() => setActiveIndex(i)}
                 >
-                  {item.icon && <span className="cp-item-icon">{item.icon}</span>}
-                  <span className="cp-item-label">{item.label}</span>
-                  {item.hint && <span className="cp-item-hint">{item.hint}</span>}
+                  {item.icon && <span className="cp-item-icon">{trNode(item.icon)}</span>}
+                  <span className="cp-item-label">{trNode(item.label)}</span>
+                  {item.hint && <span className="cp-item-hint">{trNode(item.hint)}</span>}
                 </button>
               </div>
             );

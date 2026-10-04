@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -12,18 +14,18 @@ const DialogClose = DialogPrimitive.Close;
 const DialogOverlay = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+>(({ className, ...props }, ref) => { useLocale(); return (
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-[10000] bg-black/65",
+      "fixed inset-0 z-[10000] bg-[#344939]/15 backdrop-blur-sm",
       "data-[state=open]:animate-in data-[state=open]:fade-in-0",
       "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
       className
     )}
     {...props}
   />
-));
+); });
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const DialogContent = React.forwardRef<
@@ -34,6 +36,7 @@ const DialogContent = React.forwardRef<
     zIndex?: number;
   }
 >(({ className, children, maxWidth, zIndex, style, ...props }, ref) => {
+  useLocale();
   // Compute z-indices: overlay at base, content at base+1
   const overlayZ = zIndex ?? 10000;
   const contentZ = overlayZ + 1;
@@ -45,7 +48,7 @@ const DialogContent = React.forwardRef<
         className={cn(
           "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
           "w-[90%] max-w-[520px] max-h-[90vh]",
-          "bg-term-panel border border-[rgba(212,168,96,0.18)]",
+          "bg-term-panel border border-term-border rounded-xl",
           "flex flex-col overflow-hidden",
           "font-mono text-term text-foreground",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
@@ -63,13 +66,13 @@ const DialogContent = React.forwardRef<
             "0 0 20px rgba(212,168,96,0.05)",
             "0 0 40px rgba(212,168,96,0.02)",
             /* Depth shadow */
-            "0 8px 32px rgba(0,0,0,0.55)",
-            "0 20px 60px rgba(0,0,0,0.4)",
+            "0 8px 32px rgba(52,73,57,0.10)",
+            "0 20px 60px rgba(52,73,57,0.07)",
           ].join(", "),
         }}
         {...props}
       >
-        {children}
+        {trNode(children)}
       </DialogPrimitive.Content>
     </DialogPortal>
   );
@@ -79,23 +82,23 @@ DialogContent.displayName = DialogPrimitive.Content.displayName;
 const DialogHeader = ({
   className,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
+}: React.HTMLAttributes<HTMLDivElement>) => { useLocale(); return (
   <div
     className={cn(
       "px-4 py-3 flex items-center justify-between shrink-0",
       "font-mono text-term text-term-text-bright",
-      "shadow-[0_3px_6px_-2px_rgba(0,0,0,0.4),inset_0_-1px_0_var(--separator-groove-dark),var(--highlight-top)]",
+      "shadow-[0_3px_6px_-2px_rgba(52,73,57,0.07),inset_0_-1px_0_var(--separator-groove-dark),var(--highlight-top)]",
       className
     )}
     {...props}
   />
-);
+); };
 DialogHeader.displayName = "DialogHeader";
 
 const DialogBody = ({
   className,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
+}: React.HTMLAttributes<HTMLDivElement>) => { useLocale(); return (
   <div
     className={cn(
       "p-4 overflow-y-auto flex-1 min-h-0",
@@ -104,13 +107,13 @@ const DialogBody = ({
     )}
     {...props}
   />
-);
+); };
 DialogBody.displayName = "DialogBody";
 
 const DialogFooter = ({
   className,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) => (
+}: React.HTMLAttributes<HTMLDivElement>) => { useLocale(); return (
   <div
     className={cn(
       "px-4 py-3 flex items-center justify-center gap-2 shrink-0",
@@ -119,31 +122,31 @@ const DialogFooter = ({
     )}
     {...props}
   />
-);
+); };
 DialogFooter.displayName = "DialogFooter";
 
 const DialogTitle = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
->(({ className, ...props }, ref) => (
+>(({ className, ...props }, ref) => { useLocale(); return (
   <DialogPrimitive.Title
     ref={ref}
     className={cn("font-mono text-term text-term-text-bright", className)}
     {...props}
   />
-));
+); });
 DialogTitle.displayName = DialogPrimitive.Title.displayName;
 
 const DialogDescription = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Description>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
->(({ className, ...props }, ref) => (
+>(({ className, ...props }, ref) => { useLocale(); return (
   <DialogPrimitive.Description
     ref={ref}
     className={cn("text-term text-muted-foreground", className)}
     {...props}
   />
-));
+); });
 DialogDescription.displayName = DialogPrimitive.Description.displayName;
 
 export {

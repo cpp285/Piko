@@ -29,11 +29,16 @@ export type RatingKey = (typeof RATING_DIMENSIONS)[number]["key"];
 export type Ratings = Partial<Record<RatingKey, number>>;
 
 export const BACKEND_OPTIONS = [
+  { id: "qwen", name: "Qwen Code（通义千问）", color: "#39755f" },
   { id: "claude", name: "Claude", color: "#d97706" },
   { id: "codex", name: "Codex", color: "#a855f7" },
   { id: "gemini", name: "Gemini", color: "#3b82f6" },
   { id: "aider", name: "Aider", color: "#22c55e" },
   { id: "opencode", name: "OpenCode", color: "#06b6d4" },
+  { id: "copilot", name: "GitHub Copilot", color: "#718278" },
+  { id: "cursor", name: "Cursor", color: "#477a92" },
+  { id: "pi", name: "Pi", color: "#ac772a" },
+  { id: "sapling", name: "Sapling", color: "#827598" },
 ];
 
 export const PERSONALITY_PRESETS = [

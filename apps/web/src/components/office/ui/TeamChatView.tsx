@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { TeamChatMessage } from "@/store/office-store";
@@ -22,6 +24,7 @@ function TeamChatView({ messages, agents, assetsReady }: {
   agents: Map<string, { name: string; palette?: number }>;
   assetsReady?: boolean;
 }) {
+  useLocale();
   const containerRef = useRef<HTMLDivElement>(null);
   const wasAtBottom = useRef(true);
 
@@ -71,8 +74,7 @@ function TeamChatView({ messages, agents, assetsReady }: {
   if (messages.length === 0) {
     return (
       <div style={{ textAlign: "center", color: "#5a4838", padding: 30, fontSize: 12, fontFamily: "monospace" }}>
-        No team activity yet. Hire a team and send a task to the Team Lead.
-      </div>
+        {tr("No team activity yet. Hire a team and send a task to the Team Lead.")}</div>
     );
   }
 
@@ -113,7 +115,7 @@ function TeamChatView({ messages, agents, assetsReady }: {
                 backgroundColor: cfg.border + "20", color: cfg.border,
                 border: `1px solid ${cfg.border}40`, fontFamily: "monospace",
               }}>
-                {cfg.label}
+                {trNode(cfg.label)}
               </span>
             </div>
             <ExpandableText text={msgText} maxChars={300} maxHeight={120} />

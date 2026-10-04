@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useEffect, useRef } from "react";
 import { sendCommand } from "@/lib/connection";
@@ -7,6 +9,7 @@ import TermModal from "./primitives/TermModal";
 import TermButton from "./primitives/TermButton";
 
 function ConfettiOverlay() {
+  useLocale();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -78,6 +81,7 @@ function CelebrationModal({ previewUrl, previewPath, onPreview, onDismiss, previ
   onPreview: (url: string) => void;
   onDismiss: () => void;
 }) {
+  useLocale();
   const resultInfo = { previewUrl, previewCmd, previewPort, previewPath, entryFile };
   const canPreview = hasWebPreview(resultInfo);
   const canLaunch = !canPreview && buildPreviewCommand({ previewPath, previewCmd, previewPort, projectDir, entryFile });
@@ -98,7 +102,7 @@ function CelebrationModal({ previewUrl, previewPath, onPreview, onDismiss, previ
                 const url = computePreviewUrl(resultInfo);
                 if (url) onPreview(url);
               }}
-            >{"\u25B6"} Preview</TermButton>
+            >{trNode("\u25B6")} {tr("Preview")}</TermButton>
           )}
           {canLaunch && (
             <TermButton
@@ -108,20 +112,18 @@ function CelebrationModal({ previewUrl, previewPath, onPreview, onDismiss, previ
                 onDismiss();
               }}
               style={{ borderColor: "var(--term-sem-blue)", color: "var(--term-sem-blue)" }}
-            >{"\u25B6"} Launch</TermButton>
+            >{trNode("\u25B6")} {tr("Launch")}</TermButton>
           )}
-          <TermButton variant="dim" onClick={onDismiss}>OK</TermButton>
+          <TermButton variant="dim" onClick={onDismiss}>{tr("OK")}</TermButton>
         </>
       }
     >
       <div className="text-center">
-        <div className="text-[34px] mb-2.5 text-accent">{"\u2605"}</div>
+        <div className="text-[34px] mb-2.5 text-accent">{trNode("\u2605")}</div>
         <div className="px-font text-accent text-sm mb-2.5 tracking-wide">
-          Mission Complete!
-        </div>
+          {tr("Mission Complete!")}</div>
         <div className="text-muted-foreground text-sm leading-[1.7] font-mono">
-          Your task has been completed successfully. Ready for the next mission whenever you are.
-        </div>
+          {tr("Your task has been completed successfully. Ready for the next mission whenever you are.")}</div>
       </div>
     </TermModal>
   );

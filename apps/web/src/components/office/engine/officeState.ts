@@ -29,10 +29,10 @@ import {
   DEFAULT_COLS,
   DEFAULT_ROWS,
 } from '../constants'
-import type { AgentStatus } from '@office/shared'
+import type { AgentStatus } from '@piko/shared'
 
 /**
- * Bridge between our Zustand store (string agentIds) and the pixel-agents
+ * Bridge between the Zustand store (string agentIds) and the scene
  * engine (numeric Character.id). Manages the office layout, characters,
  * seat assignments, and matrix effects.
  */
@@ -529,6 +529,7 @@ export class OfficeState {
     }
     this._charListDirty = true
     this.rebuildFurnitureInstances()
+    this.markDirty()
   }
 
   /** Remove all test characters */
@@ -549,6 +550,7 @@ export class OfficeState {
     if (toRemove.length > 0) {
       this._charListDirty = true
       this.rebuildFurnitureInstances()
+      this.markDirty()
     }
   }
 

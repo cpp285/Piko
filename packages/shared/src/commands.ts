@@ -1,5 +1,17 @@
+import { CHARACTER_COUNT } from "./characters";
+import { WorkroomCommand } from "./workroom";
 import { z } from "zod";
 import { DecisionEnum } from "./types";
+import { PERSONA_MAX_LENGTH, PersonaTargetSchema } from "./persona";
+
+export const GetAgentPersonaCommand = z.object({
+  type: z.literal("GET_AGENT_PERSONA"), requestId: z.string(), target: PersonaTargetSchema,
+});
+export const SaveAgentPersonaCommand = z.object({
+  type: z.literal("SAVE_AGENT_PERSONA"), requestId: z.string(), target: PersonaTargetSchema,
+  identity: z.string().max(PERSONA_MAX_LENGTH), soul: z.string().max(PERSONA_MAX_LENGTH),
+  expectedVersion: z.string().regex(/^[a-f0-9]{64}$/),
+});
 
 export const RunTaskCommand = z.object({
   type: z.literal("RUN_TASK"),
@@ -33,6 +45,7 @@ export const PingCommand = z.object({
 export const CreateAgentCommand = z.object({
   type: z.literal("CREATE_AGENT"),
   agentId: z.string(),
+  agentDefId: z.string().optional(),
   name: z.string(),
   role: z.string(),
   palette: z.number().optional(),
@@ -99,13 +112,15 @@ export const EndProjectCommand = z.object({
 
 export const SaveAgentDefCommand = z.object({
   type: z.literal("SAVE_AGENT_DEF"),
+  requestId: z.string().optional(),
+  initialPersona: z.object({ identity: z.string().max(PERSONA_MAX_LENGTH), soul: z.string().max(PERSONA_MAX_LENGTH) }).optional(),
   agent: z.object({
-    id: z.string(),
-    name: z.string(),
-    role: z.string(),
-    skills: z.string(),
-    personality: z.string(),
-    palette: z.number(),
+    id: PersonaTargetSchema.shape.id,
+    name: z.string().trim().min(1).max(80),
+    role: z.string().trim().min(1).max(120),
+    skills: z.string().max(4000),
+    personality: z.string().max(8000),
+    palette: z.number().int().min(0).max(CHARACTER_COUNT - 1),
     isBuiltin: z.boolean(),
     teamRole: z.enum(["dev", "reviewer", "leader"]),
     skillFiles: z.array(z.string()).optional(),
@@ -173,6 +188,11 @@ export const GetConfigCommand = z.object({
 
 export const SaveConfigCommand = z.object({
   type: z.literal("SAVE_CONFIG"),
+  requestId: z.string().optional(),
+  feishuEnabled: z.boolean().optional(),
+  feishuAppId: z.string().trim().optional(),
+  feishuAppSecret: z.string().trim().optional(),
+  feishuAllowedUsers: z.array(z.string().regex(/^ou_[a-zA-Z0-9_-]+$/)).max(100).optional(),
   telegramBotToken: z.string().optional(),
   telegramAllowedUsers: z.array(z.string()).optional(),
   worktreeEnabled: z.boolean().optional(),
@@ -224,7 +244,13 @@ export const LoadChatHistoryCommand = z.object({
   type: z.literal("LOAD_CHAT_HISTORY"),
 });
 
+export const GetWorkspaceCommand = z.object({ type: z.literal("GET_WORKSPACE") });
+
 export const CommandSchema = z.discriminatedUnion("type", [
+  WorkroomCommand,
+  GetAgentPersonaCommand,
+  SaveAgentPersonaCommand,
+  GetWorkspaceCommand,
   RunTaskCommand,
   ApprovalDecisionCommand,
   CancelTaskCommand,

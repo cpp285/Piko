@@ -1,10 +1,12 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 
-const OfficeSplash = dynamic(() => import("@/components/OfficeSplash"), { ssr: false });
+const OfficeSplash = dynamic(() => { return import("@/components/OfficeSplash"); }, { ssr: false });
 
 const isTauri = () => typeof window !== "undefined" && !!(window as any).__TAURI_INTERNALS__;
 
@@ -26,6 +28,7 @@ async function connectToPort(port: number): Promise<boolean> {
 }
 
 export default function PairPage() {
+  useLocale();
   const [gateway, setGateway] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
@@ -37,38 +40,16 @@ export default function PairPage() {
   const waitForTauriGateway = useCallback(async (): Promise<boolean> => {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
-      const { listen } = await import("@tauri-apps/api/event");
-
-      // 1. Check if sidecar is already ready (handles race where event fired before listen)
-      const stored = await invoke<{ port: number; gatewayId: string } | null>("get_gateway_info");
-      if (stored?.port) {
-        console.log(`[pair] Tauri get_gateway_info: port=${stored.port}`);
-        return connectToPort(stored.port);
+      // Poll the owned service. This also handles readiness before the page's listeners exist.
+      const deadline = Date.now() + 60_000;
+      while (Date.now() < deadline) {
+        const stored = await invoke<{ port: number; gatewayId: string } | null>("get_gateway_info");
+        if (stored?.port) return await connectToPort(stored.port);
+        const failure = await invoke<string | null>("get_gateway_error");
+        if (failure) { setError(failure); return false; }
+        await new Promise(resolve => setTimeout(resolve, 350));
       }
-
-      // 2. Not ready yet — listen for the event
-      return new Promise<boolean>((resolve) => {
-        let settled = false;
-        const timeout = setTimeout(() => {
-          if (!settled) { settled = true; unlisten?.(); resolve(false); }
-          console.log("[pair] Tauri gateway-ready timeout after 30s");
-        }, 30_000);
-
-        let unlisten: (() => void) | undefined;
-        listen<{ port: number; gatewayId: string }>("gateway-ready", async (event) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeout);
-          unlisten?.();
-          const { port } = event.payload;
-          console.log(`[pair] Tauri gateway-ready event: port=${port}`);
-          try {
-            resolve(await connectToPort(port));
-          } catch {
-            resolve(false);
-          }
-        }).then((fn) => { unlisten = fn; });
-      });
+      return false;
     } catch {
       return false;
     }
@@ -138,20 +119,9 @@ export default function PairPage() {
       const { getConnection, clearConnection } = require("@/lib/storage");
       const conn = getConnection();
 
-      // Tauri: reject cached connections to wrong gateway and wipe stale UI state
-      // Note: conn.gatewayId may be undefined for old connections — treat that as "wrong" too
-      if (isTauri() && conn?.sessionToken && conn.gatewayId !== "desktop") {
-        console.log(`[pair] Cached connection is for gateway ${conn.gatewayId}, need desktop — clearing all state`);
-        // Clear scoped storage for the stale gateway (and unscoped legacy keys)
-        const staleId = conn.gatewayId;
-        clearConnection();
-        try {
-          for (const base of ["office-chat-history", "office-team-messages", "office-team-phase"]) {
-            localStorage.removeItem(base);             // legacy unscoped
-            localStorage.removeItem(`${base}:${staleId}`); // scoped
-          }
-        } catch { /* ignore */ }
-      } else if (conn?.sessionToken) {
+      // Desktop ports are assigned on each launch. Always discover this app's own service;
+      // cached browser credentials must never send us to a different gateway.
+      if (!isTauri() && conn?.sessionToken) {
         await navigateAfterDelay();
         router.push("/office");
         return;
@@ -173,6 +143,10 @@ export default function PairPage() {
   async function handleRetry() {
     setStatus("connecting");
     setError("");
+    if (isTauri()) {
+      try { const { invoke } = await import("@tauri-apps/api/core"); await invoke("restart_gateway"); }
+      catch (e) { setError(String(e)); setStatus("failed"); return; }
+    }
     const ok = await autoConnect();
     if (ok) {
       router.push("/office");
@@ -217,28 +191,28 @@ export default function PairPage() {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 24 }}>
       {/* Matrix splash — shown during auto-connect */}
       {status === "connecting" && (
-        <OfficeSplash onComplete={() => {}} />
+        isTauri() ? <div className="desktop-startup"><span className="office-brand-mark">◈</span><h1>Piko</h1><p>{tr("Starting your local workspace…")}</p><span className="desktop-startup-progress" /></div> : <OfficeSplash onComplete={() => {}} />
       )}
 
       {/* Local connection failed */}
       {status === "failed" && (
         <div style={{ textAlign: "center", marginTop: 24, maxWidth: 400 }}>
-          <p style={{ color: "#888", fontSize: 14, marginBottom: 20 }}>No local gateway found. Make sure the gateway is running.</p>
+          <p style={{ color: "#6c7d70", fontSize: 14, marginBottom: 20 }}>{error || tr(isTauri() ? "The local service could not start. Try restarting it." : "No local gateway found. Make sure the gateway is running.")}</p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
             <button
               onClick={handleRetry}
               style={{
-                padding: "10px 24px", borderRadius: 8, border: "2px solid #4f46e5",
+                padding: "10px 24px", borderRadius: 8, border: "2px solid var(--term-border)",
                 backgroundColor: "transparent", color: "#4f46e5", fontSize: 14, cursor: "pointer",
               }}
-            >Retry Local</button>
+            >{tr(isTauri() ? "Restart local service" : "Retry Local")}</button>
             <button
               onClick={() => setStatus("remote")}
               style={{
                 padding: "10px 24px", borderRadius: 8, border: "none",
-                backgroundColor: "#333", color: "#aaa", fontSize: 14, cursor: "pointer",
+                backgroundColor: "var(--term-panel)", color: "#aaa", fontSize: 14, cursor: "pointer",
               }}
-            >Connect Remote</button>
+            >{tr("Connect Remote")}</button>
           </div>
         </div>
       )}
@@ -246,30 +220,30 @@ export default function PairPage() {
       {/* Remote gateway form */}
       {status === "remote" && (
         <>
-          <p style={{ color: "#aaa", marginBottom: 32 }}>Enter your gateway address and pair code</p>
+          <p style={{ color: "#aaa", marginBottom: 32 }}>{tr("Enter your gateway address and pair code")}</p>
           <form onSubmit={handleRemoteSubmit} style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%", maxWidth: 320 }}>
-            <label style={{ fontSize: 13, color: "#888" }}>Gateway Address</label>
+            <label style={{ fontSize: 13, color: "#888" }}>{tr("Gateway Address")}</label>
             <input
               type="text"
               value={gateway}
               onChange={(e) => setGateway(e.target.value)}
-              placeholder="your-gateway.com"
+              placeholder={tr("your-gateway.com")}
               style={{
-                fontSize: 16, padding: "12px 16px", borderRadius: 8, border: "2px solid #444",
-                backgroundColor: "#222", color: "#fff", marginTop: -8,
+                fontSize: 16, padding: "12px 16px", borderRadius: 8, border: "2px solid var(--term-border)",
+                backgroundColor: "var(--term-panel)", color: "#fff", marginTop: -8,
               }}
             />
-            <label style={{ fontSize: 13, color: "#888" }}>Pair Code</label>
+            <label style={{ fontSize: 13, color: "#888" }}>{tr("Pair Code")}</label>
             <input
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="PAIR CODE"
+              placeholder={tr("PAIR CODE")}
               maxLength={6}
               style={{
                 fontSize: 32, textAlign: "center", letterSpacing: 8,
-                padding: "12px 16px", borderRadius: 8, border: "2px solid #444",
-                backgroundColor: "#222", color: "#fff", marginTop: -8,
+                padding: "12px 16px", borderRadius: 8, border: "2px solid var(--term-border)",
+                backgroundColor: "var(--term-panel)", color: "#fff", marginTop: -8,
               }}
             />
             <div style={{ display: "flex", gap: 8 }}>
@@ -277,10 +251,10 @@ export default function PairPage() {
                 type="button"
                 onClick={() => setStatus("failed")}
                 style={{
-                  padding: "12px 16px", borderRadius: 8, border: "1px solid #444",
+                  padding: "12px 16px", borderRadius: 8, border: "1px solid var(--term-border)",
                   backgroundColor: "transparent", color: "#888", fontSize: 14, cursor: "pointer",
                 }}
-              >Back</button>
+              >{tr("Back")}</button>
               <button
                 type="submit"
                 disabled={loading || code.length < 6 || !gateway.trim()}
@@ -289,17 +263,17 @@ export default function PairPage() {
                   backgroundColor: code.length >= 6 && gateway.trim() ? "#4f46e5" : "#333",
                   color: "#fff", fontSize: 18, cursor: code.length >= 6 ? "pointer" : "default",
                 }}
-              >{loading ? "Pairing..." : "Connect"}</button>
+              >{trNode(loading ? "Pairing..." : "Connect")}</button>
             </div>
           </form>
           <button
             onClick={handleRetry}
             style={{ marginTop: 16, background: "none", border: "none", color: "#666", fontSize: 12, cursor: "pointer" }}
-          >Retry local connection</button>
+          >{tr("Retry local connection")}</button>
         </>
       )}
 
-      {error && <p style={{ color: "#ef4444", textAlign: "center", marginTop: 16 }}>{error}</p>}
+      {error && <p style={{ color: "#ef4444", textAlign: "center", marginTop: 16 }}>{trNode(error)}</p>}
 
       <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
     </div>

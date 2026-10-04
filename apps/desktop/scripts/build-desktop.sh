@@ -1,38 +1,30 @@
 #!/bin/bash
-set -e
-
+set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-SIDECAR="$SCRIPT_DIR/../src-tauri/sidecar"
+MONOREPO="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+SIDECAR="$MONOREPO/apps/desktop/src-tauri/sidecar"
 
-echo "=== Building Open Office Desktop ==="
+# Keep both packaged copies of the interface on the same build, without touching a running gateway.
+echo "[1/3] 构建聊天界面"
+cd "$MONOREPO"
+pnpm --filter web build
 
-# 1. Build web static export
-echo "[1/3] Building web..."
-cd "$ROOT/web" && pnpm build
+echo "[2/3] 打包本地服务"
+cd "$MONOREPO/apps/gateway"
+BUNDLE_ALL=1 pnpm exec tsup --out-dir "$MONOREPO/.review-runtime/desktop-gateway"
 
-# 2. Build gateway bundle (standalone — all deps bundled for sidecar)
-echo "[2/3] Building gateway (standalone)..."
-cd "$ROOT/gateway" && BUNDLE_ALL=1 pnpm build
-
-# 3. Prepare sidecar directory
-echo "[3/3] Preparing sidecar..."
-rm -rf "$SIDECAR"
+echo "[3/3] 准备应用运行环境"
 mkdir -p "$SIDECAR"
-
-# Copy Node.js binary
 cp "$(command -v node)" "$SIDECAR/node"
-
-# Copy gateway bundle
-cp "$ROOT/gateway/dist/index.js" "$SIDECAR/gateway.js"
-cp "$ROOT/gateway/dist/index.js.map" "$SIDECAR/gateway.js.map" 2>/dev/null || true
-
-# Copy web static files for gateway's HTTP serving
-cp -r "$ROOT/web/out" "$SIDECAR/web"
-
-# Copy bundled agent definitions (synced to ~/.claude/agents/ on startup)
-MONOREPO="$(cd "$ROOT/.." && pwd)"
-cp -r "$MONOREPO/packages/orchestrator/agents" "$SIDECAR/agents"
-
-echo "=== Sidecar ready: $SIDECAR ==="
-ls -lh "$SIDECAR/node" "$SIDECAR/gateway.js"
+chmod +x "$SIDECAR/node"
+cp "$MONOREPO/.review-runtime/desktop-gateway/index.js" "$SIDECAR/gateway.js"
+# These are generated resources; replace them so removed files cannot leak into a release.
+rm -rf "$SIDECAR/web" "$SIDECAR/agents"
+cp -R "$MONOREPO/apps/web/out" "$SIDECAR/web"
+cp -R "$MONOREPO/packages/orchestrator/agents" "$SIDECAR/agents"
+node "$SCRIPT_DIR/smoke-sidecar.mjs" "$SIDECAR"
+# Node is a nested executable, so give local development packages an integrity signature.
+if [ "$(uname)" = "Darwin" ]; then
+  codesign --force --sign - "$SIDECAR/node"
+fi
+printf '运行环境已准备：%s\n' "$SIDECAR"

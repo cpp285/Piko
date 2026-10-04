@@ -1,9 +1,12 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 function JoinContent() {
+  useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState("");
@@ -58,20 +61,19 @@ function JoinContent() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 24 }}>
-      <h1 style={{ fontSize: 28, marginBottom: 8 }}>Open Office</h1>
-      {!error && <p style={{ color: "#666", fontSize: 14 }}>{status}</p>}
+      <h1 style={{ fontSize: 28, marginBottom: 8 }}>{tr("Piko")}</h1>
+      {!error && <p style={{ color: "#666", fontSize: 14 }}>{trNode(status)}</p>}
       {error && (
         <>
-          <p style={{ color: "#ef4444", fontSize: 14, marginTop: 16 }}>{error}</p>
+          <p style={{ color: "#ef4444", fontSize: 14, marginTop: 16 }}>{trNode(error)}</p>
           <button
             onClick={() => router.push("/pair")}
             style={{
               marginTop: 24, padding: "12px 24px", borderRadius: 8, border: "none",
-              backgroundColor: "#4f46e5", color: "#fff", fontSize: 16, cursor: "pointer",
+              backgroundColor: "var(--term-panel)", color: "#fff", fontSize: 16, cursor: "pointer",
             }}
           >
-            Go to Pair Page
-          </button>
+            {tr("Go to Pair Page")}</button>
         </>
       )}
     </div>
@@ -79,11 +81,12 @@ function JoinContent() {
 }
 
 export default function JoinPage() {
+  useLocale();
   return (
     <Suspense fallback={
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 24 }}>
-        <h1 style={{ fontSize: 28, marginBottom: 8 }}>Open Office</h1>
-        <p style={{ color: "#666", fontSize: 14 }}>Loading...</p>
+        <h1 style={{ fontSize: 28, marginBottom: 8 }}>{tr("Piko")}</h1>
+        <p style={{ color: "#666", fontSize: 14 }}>{tr("Loading...")}</p>
       </div>
     }>
       <JoinContent />

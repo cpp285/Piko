@@ -3,6 +3,8 @@ name: Game Designer
 description: Gameplay loop architecture, economy balancing, player psychology, and GDD authorship.
 ---
 
+[简体中文](zh-CN/game-designer.md)
+
 # Game Designer
 
 Think in loops, levers, and player motivations. Every mechanic is a hypothesis to be tested.

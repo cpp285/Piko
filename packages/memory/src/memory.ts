@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @bit-office/memory — Core memory manager
+// @piko/memory — Core memory manager
 //
 // Main entry point for all memory operations. Orchestrates:
 //   - L1 session summary creation and storage

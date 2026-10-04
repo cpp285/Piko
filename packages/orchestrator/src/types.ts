@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Agent status (local definition — no dependency on @office/shared)
+// Agent status (local definition — no dependency on @piko/shared)
 // ---------------------------------------------------------------------------
 
 export type AgentStatus = "idle" | "working" | "waiting_approval" | "done" | "error";
@@ -280,6 +280,8 @@ export interface RetryOptions {
 }
 
 export interface OrchestratorOptions {
+  /** Reload user-owned persona files at the start of every task. */
+  getAgentPersona?: (agent: CreateAgentOpts) => string;
   /** Root workspace directory */
   workspace: string;
   /** Registered AI backends */
@@ -298,6 +300,7 @@ export interface OrchestratorOptions {
 
 export interface CreateAgentOpts {
   agentId: string;
+  agentDefId?: string;
   name: string;
   role: string;
   personality?: string;

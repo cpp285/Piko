@@ -7,17 +7,11 @@ import type { SpriteData, OfficeLayout } from '../types'
 import { setCharacterTemplates } from './spriteData'
 import { setFloorSprites } from '../floorTiles'
 import { setWallSprites } from '../wallTiles'
+import { loadCharacterSprites, type CharacterDirectionSprites } from './characterLoader'
 
 // ── Constants ──────────────────────────────────────────────────
 
 const PNG_ALPHA_THRESHOLD = 128
-
-// Character sprite sheets: 112×96 each (7 frames × 3 directions, 16×32 per frame)
-const CHAR_FRAME_W = 16
-const CHAR_FRAME_H = 32
-const CHAR_FRAMES_PER_ROW = 7
-const CHAR_COUNT = 6
-const CHAR_DIRECTIONS = ['down', 'up', 'right'] as const
 
 // Wall sprite sheet: 64×128 (4×4 grid of 16×32 pieces)
 const WALL_PIECE_W = 16
@@ -124,38 +118,6 @@ function generateFallbackSprite(w: number, h: number, fill: string, edge: string
   return sprite
 }
 
-// ── Character loading ──────────────────────────────────────────
-
-interface CharacterDirectionSprites {
-  down: SpriteData[]
-  up: SpriteData[]
-  right: SpriteData[]
-}
-
-async function loadCharacterSprites(): Promise<CharacterDirectionSprites[]> {
-  const characters: CharacterDirectionSprites[] = []
-
-  for (let ci = 0; ci < CHAR_COUNT; ci++) {
-    const img = await loadImage(`/assets/characters/char_${ci}.png`)
-    const charData: CharacterDirectionSprites = { down: [], up: [], right: [] }
-
-    for (let dirIdx = 0; dirIdx < CHAR_DIRECTIONS.length; dirIdx++) {
-      const dir = CHAR_DIRECTIONS[dirIdx]
-      const rowY = dirIdx * CHAR_FRAME_H
-      const frames: SpriteData[] = []
-
-      for (let f = 0; f < CHAR_FRAMES_PER_ROW; f++) {
-        const frameX = f * CHAR_FRAME_W
-        frames.push(imageRegionToSprite(img, frameX, rowY, CHAR_FRAME_W, CHAR_FRAME_H))
-      }
-      charData[dir] = frames
-    }
-    characters.push(charData)
-  }
-
-  return characters
-}
-
 // ── Wall loading ───────────────────────────────────────────────
 
 async function loadWallTileSprites(): Promise<SpriteData[]> {
@@ -235,7 +197,7 @@ export interface TilesetFurnitureEntry {
 
 /**
  * Tileset furniture catalog — maps pixel regions in "Office Tileset All 16x16.png" (256×512).
- * Coordinates from the pixel-agents tileset-metadata-final.json import pipeline.
+ * Coordinates identify furniture regions within the tileset.
  * Uses ASSET_* IDs matching the Level 4 layout JSON.
  */
 export const TILESET_FURNITURE: TilesetFurnitureEntry[] = [
@@ -365,7 +327,7 @@ async function loadTilesetFurniture(): Promise<LoadedTilesetSprites> {
 
 async function loadLayoutJson(): Promise<OfficeLayout | null> {
   try {
-    const resp = await fetch('/pixel-agents-layout.json')
+    const resp = await fetch('/piko-layout.json')
     if (!resp.ok) return null
     const data = await resp.json()
     if (data && data.version === 1 && Array.isArray(data.tiles)) {
@@ -394,7 +356,10 @@ export interface LoadedAssets {
 export async function loadAllAssets(): Promise<LoadedAssets> {
   // Load all asset types in parallel
   const [characters, walls, tilesetData, layout] = await Promise.all([
-    loadCharacterSprites(),
+    loadCharacterSprites().then(characters => {
+      setCharacterTemplates(characters)
+      return characters
+    }),
     loadWallTileSprites(),
     loadTilesetFurniture(),
     loadLayoutJson(),
@@ -404,7 +369,6 @@ export async function loadAllAssets(): Promise<LoadedAssets> {
   const floors = generateFloorPatterns()
 
   // Inject into the engine's sprite systems
-  setCharacterTemplates(characters)
   setWallSprites(walls)
   setFloorSprites(floors)
 

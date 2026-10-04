@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useOfficeStore } from "@/store/office-store";
 import type { Project } from "@/store/office-store";
@@ -16,6 +18,7 @@ interface ProjectBarProps {
  * Phase 1 of project-centric architecture.
  */
 export default function ProjectBar({ onNewProject, onHireAgent }: ProjectBarProps) {
+  useLocale();
   const projects = useOfficeStore((s) => s.projects);
   const activeProjectId = useOfficeStore((s) => s.activeProjectId);
   const agents = useOfficeStore((s) => s.agents);
@@ -46,8 +49,8 @@ export default function ProjectBar({ onNewProject, onHireAgent }: ProjectBarProp
           onClick={onNewProject}
         >
           <span className="pbar-cta-icon">+</span>
-          <span className="pbar-cta-label">New Project</span>
-          <span className="pbar-cta-hint">Select a directory, then add agents</span>
+          <span className="pbar-cta-label">{tr("New Project")}</span>
+          <span className="pbar-cta-hint">{tr("Select a directory, then add agents")}</span>
         </button>
       </div>
     );
@@ -64,17 +67,17 @@ export default function ProjectBar({ onNewProject, onHireAgent }: ProjectBarProp
               key={p.id}
               className={`pbar-tab${isActive ? " pbar-tab-active" : ""}`}
               onClick={() => handleTabClick(p.id)}
-              title={p.directory}
+              title={tr(p.directory)}
             >
               <span className="pbar-tab-name">{p.name}</span>
-              <span className="pbar-tab-count">{agentCount}</span>
+              <span className="pbar-tab-count">{trNode(agentCount)}</span>
             </button>
           );
         })}
         <button
           className="pbar-tab pbar-tab-new"
           onClick={onNewProject}
-          title="New Project"
+          title={tr("New Project")}
         >
           +
         </button>
@@ -84,10 +87,10 @@ export default function ProjectBar({ onNewProject, onHireAgent }: ProjectBarProp
         <button
           className="pbar-hire"
           onClick={onHireAgent}
-          title="Add agent to project"
+          title={tr("Add agent to project")}
         >
           <span className="pbar-hire-icon">+</span>
-          <span className="pbar-hire-label">Agent</span>
+          <span className="pbar-hire-label">{tr("Agent")}</span>
         </button>
       )}
     </div>

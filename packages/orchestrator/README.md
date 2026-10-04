@@ -1,4 +1,6 @@
-# @bit-office/orchestrator
+# @piko/orchestrator
+
+[简体中文](README.zh-CN.md)
 
 Multi-agent team collaboration engine. Manages agent lifecycles, task delegation, phase transitions, preview detection, and result finalization — all behind a typed event-driven API.
 
@@ -20,7 +22,7 @@ Multi-agent team collaboration engine. Manages agent lifecycles, task delegation
 ```
 
 **Key design decisions:**
-- Orchestrator is a **pure logic library** — no I/O, no HTTP, no persistence. The consumer (gateway) handles all external concerns.
+- The orchestrator exposes a **typed logic API**. The gateway owns transports and application persistence; agent, memory, preview, and worktree modules perform process and filesystem I/O.
 - All communication via **typed events** (`EventEmitter<OrchestratorEventMap>`). The consumer subscribes and forwards to its own transport (WebSocket, Ably, etc.).
 - **AI-backend agnostic** — any CLI that accepts a prompt and outputs text can be wrapped as an `AIBackend`.
 
@@ -47,6 +49,8 @@ src/
   ai-backend.ts         29 lines  AIBackend interface
   index.ts              63 lines  Public exports + factory
 ```
+
+> Current team creation also includes product and design specialists. The developer/reviewer flow below describes the implementation and review portion. Codex uses fresh executions plus injected summaries; the native resume examples apply to Claude.
 
 ## Team Collaboration Flow
 
@@ -130,8 +134,8 @@ Persistent cross-project learning system. Agents improve over time by rememberin
 
 ### How It Works
 
-- Storage: `~/.open-office[-dev]/data/memory/memory.json` (human-readable, persists across restarts)
-- Memory is **global**, not per-agent — all dev workers in any team share the same learned context
+- Storage: `~/.piko[-dev]/data/memory/memory.json` (human-readable, persists across restarts)
+- The legacy memory described here is shared. The current memory package also maintains per-agent sessions/facts and shared knowledge, scoped to the gateway instance.
 - Only recurring patterns are injected (count ≥ 2), so one-off issues don't pollute prompts
 - Review patterns are capped at top 20, tech preferences at last 10, project history at last 50
 
@@ -151,7 +155,7 @@ USER'S PREFERRED TECH: Vanilla JS + Canvas, React + Tailwind
 ### API
 
 ```typescript
-import { getMemoryStore, clearMemory } from "@bit-office/orchestrator";
+import { getMemoryStore, clearMemory } from "@piko/orchestrator";
 
 // Inspect current memory
 const store = getMemoryStore();
@@ -170,7 +174,7 @@ When multiple agents work on the same repo, each agent gets its own **git worktr
 ### Design Principles
 
 - **One agent = one worktree = one branch.** Worktree and branch are keyed by `agentId`, not `taskId`. This keeps the directory stable across tasks so Claude Code `--resume` works (same CWD).
-- **Worktrees live outside the repo** at `~/.open-office[-dev]/worktrees/<repo-hash>/<agentId>/`. This prevents Claude Code from traversing up to the main repo root.
+- **Worktrees live outside the repo** at `~/.piko[-dev]/worktrees/<repo-hash>/<agentId>/`. This prevents Claude Code from traversing up to the main repo root.
 - **Branch naming:** `agent/<agentName>-<shortId>` (e.g. `agent/nova-pTTERq`). Unique per agent, human-readable.
 - **Branches are local only** — never pushed to remote. Visible in SourceTree/git tools via shared `.git`.
 
@@ -182,7 +186,7 @@ Agent gets task
   ├─ worktree exists? ──yes──> syncWorktreeToMain (rebase onto latest main)
   │                             skipped if pendingMerge=true
   │
-  └─ no ──> git worktree add ~/.open-office[-dev]/worktrees/<repo>/<agentId>
+  └─ no ──> git worktree add ~/.piko[-dev]/worktrees/<repo>/<agentId>
             creates branch agent/<name>-<id>
             session.clearHistory() (can't --resume in new CWD)
   │
@@ -292,7 +296,7 @@ const orc = createOrchestrator({
 ### Directory Layout
 
 ```
-~/.open-office-dev/              # dev mode (release: ~/.open-office/)
+~/.piko-dev/              # dev mode (release: ~/.piko/)
 ├── config.json
 ├── machine-id
 ├── data/
@@ -303,7 +307,7 @@ const orc = createOrchestrator({
 │   └── agents.json              # agent definitions
 ├── projects/                    # agent working directories (default workspace)
 └── worktrees/                   # centralized worktree storage
-    └── bit-office-a3f2b1/       # grouped by source repo
+    └── piko-a3f2b1/       # grouped by source repo
         ├── agent-pTTERq/        # one dir per agent (stable across tasks)
         ├── agent-1gZQUa/
         └── .owners/             # ownership metadata for GC
@@ -316,7 +320,7 @@ When a task completes, preview URL is resolved through a **7-step cascading fall
 ```
 1. PREVIEW_CMD + PREVIEW_PORT  -->  Run server, proxy via port
 2. PREVIEW_CMD (no port)       -->  Desktop/CLI app (user launches manually)
-3. ENTRY_FILE (.html)          -->  Static serve via npx serve:9100
+3. ENTRY_FILE (.html)          -->  Static serve via npx serve:9199
 4. "PREVIEW: http://..." in stdout  -->  Explicit URL from agent
 5. .html path mentioned in stdout   -->  Regex extraction
 6. .html in changedFiles       -->  Static serve
@@ -332,8 +336,8 @@ At the team level, `ResultFinalizer` adds two additional layers before this chai
 ### Basic Setup
 
 ```typescript
-import { createOrchestrator } from "@bit-office/orchestrator";
-import type { AIBackend } from "@bit-office/orchestrator";
+import { createOrchestrator } from "@piko/orchestrator";
+import type { AIBackend } from "@piko/orchestrator";
 
 const claude: AIBackend = {
   id: "claude",
@@ -397,8 +401,8 @@ orc.runTask("agent-1", "task-1", "Build a landing page");
 ```typescript
 // 1. Create agents
 orc.createAgent({ agentId: "lead-1", name: "PM", role: "Team Lead" });
-orc.createAgent({ agentId: "dev-1",  name: "Leo", role: "Developer" });
-orc.createAgent({ agentId: "rev-1",  name: "Ada", role: "Code Reviewer" });
+orc.createAgent({ agentId: "dev-1",  name: "赵凯", role: "Developer" });
+orc.createAgent({ agentId: "rev-1",  name: "李敏", role: "Code Reviewer" });
 orc.setTeamLead("lead-1");
 
 // 2. Start in CREATE phase — leader produces a [PLAN]
@@ -473,7 +477,7 @@ if (state.projectDir) orc.setTeamProjectDir(state.projectDir);
 All magic numbers are centralized in `config.ts`:
 
 ```typescript
-import { CONFIG } from "@bit-office/orchestrator";
+import { CONFIG } from "@piko/orchestrator";
 
 CONFIG.delegation.maxDepth          // 5
 CONFIG.delegation.maxTotal          // 20
@@ -483,19 +487,19 @@ CONFIG.delegation.maxReviewRounds   // 3
 CONFIG.delegation.maxDirectFixes    // 1 (direct reviewer→dev fix attempts before leader)
 
 CONFIG.timing.leaderTimeoutMs       // 3 min
-CONFIG.timing.workerTimeoutMs       // 8 min
+CONFIG.timing.workerTimeoutMs       // 30 min
 CONFIG.timing.resultBatchWindowMs   // 20s (safety net for batch flushing)
 CONFIG.timing.idleDoneDelayMs       // 5s
 CONFIG.timing.idleErrorDelayMs      // 3s
 
-CONFIG.preview.staticPort           // 9100
+CONFIG.preview.staticPort           // 9199
 CONFIG.preview.buildOutputCandidates // ["dist/index.html", ...]
 CONFIG.preview.runners              // { ".py": "python3", ".js": "node", ... }
 ```
 
 ## Prompt Templates
 
-15 templates with compile-time typed names (`TemplateName` union). Templates are embedded as defaults and optionally overridden from disk (`promptsDir`).
+The original 15 templates, plus backend-specific worker variants, use compile-time typed names (`TemplateName` union). Templates are embedded as defaults and optionally overridden from disk (`promptsDir`).
 
 | Template | Phase | Used When |
 |----------|-------|-----------|
@@ -515,7 +519,7 @@ CONFIG.preview.runners              // { ".py": "python3", ".js": "node", ... }
 | `delegation-prefix` | EXECUTE | Wraps delegated task prompts |
 | `delegation-hint` | EXECUTE | Delegation syntax helper |
 
-Templates use `{{variable}}` substitution. Key variables include `{{memory}}` (injected from Agent Memory for dev workers) and `{{soloHint}}` (solo mode instructions). Override any template by placing a `<template-name>.md` file in `promptsDir`.
+Templates use `{{variable}}` substitution. Key variables include `{{memory}}` (injected from Agent Memory for dev workers) and `{{soloHint}}` (solo mode instructions). Templates are mirrored as `<template-name>.md` in `promptsDir`. Startup currently overwrites these files with built-in defaults; disk edits alone do not survive a restart.
 
 ## Owner Metadata (Multi-Instance Safety)
 
@@ -567,8 +571,8 @@ Workers receive a lightweight team awareness block (~30 tokens per peer) via `bu
 ```
 ===== TEAM AWARENESS =====
 Your teammates (for context -- do NOT delegate or coordinate with them):
-- Leo (Developer) [working] -- feat: implement game loop...
-- Ada (Code Reviewer) [idle]
+- 赵凯 (Developer) [working] -- feat: implement game loop...
+- 李敏 (Code Reviewer) [idle]
 ```
 
 This shows peer names, roles, statuses, and last results — enough to avoid file conflicts without overwhelming the prompt.
@@ -577,7 +581,7 @@ This shows peer names, roles, statuses, and last results — enough to avoid fil
 
 ### Agent State
 
-File: `~/.open-office[-dev]/data/instances/<id>/team-state.json` (instance-scoped)
+File: `~/.piko[-dev]/data/instances/<id>/team-state.json` (instance-scoped)
 
 ```typescript
 interface PersistedAgent {
@@ -617,7 +621,7 @@ interface PersistedTeam {
 
 ### Project History
 
-File: `~/.open-office[-dev]/data/project-history/<startedAt>-<name>.json`
+File: `~/.piko[-dev]/data/project-history/<startedAt>-<name>.json`
 
 Completed projects are archived with all events, agents, team state, preview info, token usage, and ratings. Event buffer is persisted to `project-events.jsonl` (instance-scoped) so archives survive gateway restarts.
 
@@ -631,10 +635,10 @@ External agents (detected by process scanner) bypass the orchestrator entirely:
 
 ## Console Mode (UI)
 
-Terminal-style chat interface with CRT effects:
+Historical console design (the current UI uses light themes):
 - **Layout**: Left vertical tab bar (Agents/Team/External) + top horizontal agent strip + full-height chat
 - **Visual**: JetBrains Mono font, green terminal theme (#18ff62), CRT scanlines, screen flicker
-- **Messages**: Terminal log format with timestamps and agent name tags `[Marcus]`
+- **Messages**: Terminal log format with timestamps and agent name tags `[陈峰]`
 - **Input**: Always-visible `>` prompt, ESC to stop working agent, type to continue
 - **Streaming**: Real-time output via LOG_APPEND, typewriter reveal effect
 - **Completion**: Duration display (e.g. "Brewed for 1m 45s")

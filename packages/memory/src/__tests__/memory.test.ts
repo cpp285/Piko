@@ -30,7 +30,7 @@ function freshStorage(): void {
 }
 
 // All describes share a module-global storage root, so they MUST run sequentially.
-describe("@bit-office/memory", { concurrency: 1 }, () => {
+describe("@piko/memory", { concurrency: 1 }, () => {
 
 describe("commitSession", { concurrency: 1 }, () => {
   it("should create session summary and save to disk", () => {
@@ -61,9 +61,9 @@ SUMMARY: Redesigned MultiPaneView pagination bar with styled buttons`,
     assert.equal(history.history.length, 1);
   });
 
-  it("should maintain ring buffer of 10 sessions", () => {
+  it("should maintain ring buffer of 30 sessions", () => {
     freshStorage();
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 35; i++) {
       commitSession({
         agentId: "alex-2",
         stdout: `SUMMARY: Task ${i + 1}\n`,
@@ -74,9 +74,9 @@ SUMMARY: Redesigned MultiPaneView pagination bar with styled buttons`,
     }
 
     const history = getSessionHistory("alex-2");
-    assert.equal(history.history.length, 10);
-    assert.ok(history.latest!.what.includes("Task 15"));
-    assert.ok(history.history[0].what.includes("Task 15"));
+    assert.equal(history.history.length, 30);
+    assert.ok(history.latest!.what.includes("Task 35"));
+    assert.ok(history.history[0].what.includes("Task 35"));
   });
 });
 
@@ -206,4 +206,4 @@ describe("legacy operations", { concurrency: 1 }, () => {
   });
 });
 
-}); // end @bit-office/memory
+}); // end @piko/memory

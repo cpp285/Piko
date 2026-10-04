@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -6,7 +8,7 @@ import { useOfficeStore, imageUploadCallbacks } from "@/store/office-store";
 import { connect, sendCommand } from "@/lib/connection";
 import { getConnection } from "@/lib/storage";
 import { nanoid } from "nanoid";
-import type { AgentDefinition } from "@office/shared";
+import type { AgentDefinition } from "@piko/shared";
 import { OfficeState } from "@/components/office/engine/officeState";
 import { EditorState } from "@/components/office/editor/editorState";
 import { EditTool } from "@/components/office/types";
@@ -32,34 +34,35 @@ import { SysMsg, TokenBadge } from "@/components/office/ui/MessageBubble";
 
 // Dynamic imports for extracted components
 import dynamic from "next/dynamic";
-const PixelOfficeScene = dynamic(() => import("@/components/office/scene/PixelOfficeScene"), { ssr: false });
-const EditorToolbar = dynamic(() => import("@/components/office/editor/EditorToolbar"), { ssr: false });
-const ZoomControls = dynamic(() => import("@/components/office/ui/ZoomControls"), { ssr: false });
-const SettingsModal = dynamic(() => import("@/components/office/ui/SettingsModal"), { ssr: false });
-const BottomToolbar = dynamic(() => import("@/components/office/ui/BottomToolbar"), { ssr: false });
-const ProjectHistory = dynamic(() => import("@/components/office/ui/ProjectHistory"), { ssr: false });
-const OfficeSwitcher = dynamic(() => import("@/components/office/ui/OfficeSwitcher"), { ssr: false });
-const SpriteAvatar = dynamic(() => import("@/components/office/ui/SpriteAvatar"), { ssr: false });
-const LoadingOverlay = dynamic(() => import("@/components/office/ui/LoadingOverlay"), { ssr: false });
-const PreviewOverlay = dynamic(() => import("@/components/office/ui/PreviewOverlay"), { ssr: false });
-const CelebrationModal = dynamic(() => import("@/components/office/ui/CelebrationModal"), { ssr: false });
-const ConfettiOverlay = dynamic(() => import("@/components/office/ui/CelebrationModal").then(m => ({ default: m.ConfettiOverlay })), { ssr: false });
-const MessageBubble = dynamic(() => import("@/components/office/ui/MessageBubble"), { ssr: false });
-const TeamChatView = dynamic(() => import("@/components/office/ui/TeamChatView"), { ssr: false });
-const TeamActivityToast = dynamic(() => import("@/components/office/ui/TeamActivityToast"), { ssr: false });
-const TeamActivityLog = dynamic(() => import("@/components/office/ui/TeamActivityLog"), { ssr: false });
-const CreateAgentModal = dynamic(() => import("@/components/office/ui/CreateAgentModal"), { ssr: false });
-const HireModal = dynamic(() => import("@/components/office/ui/HireModal"), { ssr: false });
-const HireTeamModal = dynamic(() => import("@/components/office/ui/HireTeamModal"), { ssr: false });
-const AgentPane = dynamic(() => import("@/components/office/ui/AgentPane"), { ssr: false });
-const MultiPaneView = dynamic(() => import("@/components/office/ui/MultiPaneView"), { ssr: false });
-const CommandPalette = dynamic(() => import("@/components/office/ui/CommandPalette"), { ssr: false });
-const ProjectBar = dynamic(() => import("@/components/office/ui/ProjectBar"), { ssr: false });
-const NewProjectModal = dynamic(() => import("@/components/office/ui/NewProjectModal"), { ssr: false });
-const AblyLoader = dynamic(() => import("@/hooks/useAblyLoader"), { ssr: false });
+const PixelOfficeScene = dynamic(() => { return import("@/components/office/scene/PixelOfficeScene"); }, { ssr: false });
+const EditorToolbar = dynamic(() => { return import("@/components/office/editor/EditorToolbar"); }, { ssr: false });
+const ZoomControls = dynamic(() => { return import("@/components/office/ui/ZoomControls"); }, { ssr: false });
+const SettingsModal = dynamic(() => { return import("@/components/office/ui/SettingsModal"); }, { ssr: false });
+const BottomToolbar = dynamic(() => { return import("@/components/office/ui/BottomToolbar"); }, { ssr: false });
+const WorkBench = dynamic(() => { return import("@/components/office/ui/WorkBench"); }, { ssr: false });
+const ProjectHistory = dynamic(() => { return import("@/components/office/ui/ProjectHistory"); }, { ssr: false });
+const OfficeSwitcher = dynamic(() => { return import("@/components/office/ui/OfficeSwitcher"); }, { ssr: false });
+const SpriteAvatar = dynamic(() => { return import("@/components/office/ui/SpriteAvatar"); }, { ssr: false });
+const LoadingOverlay = dynamic(() => { return import("@/components/office/ui/LoadingOverlay"); }, { ssr: false });
+const PreviewOverlay = dynamic(() => { return import("@/components/office/ui/PreviewOverlay"); }, { ssr: false });
+const CelebrationModal = dynamic(() => { return import("@/components/office/ui/CelebrationModal"); }, { ssr: false });
+const ConfettiOverlay = dynamic(() => { return import("@/components/office/ui/CelebrationModal").then(m => ({ default: m.ConfettiOverlay })); }, { ssr: false });
+const MessageBubble = dynamic(() => { return import("@/components/office/ui/MessageBubble"); }, { ssr: false });
+const TeamChatView = dynamic(() => { return import("@/components/office/ui/TeamChatView"); }, { ssr: false });
+const TeamActivityToast = dynamic(() => { return import("@/components/office/ui/TeamActivityToast"); }, { ssr: false });
+const TeamActivityLog = dynamic(() => { return import("@/components/office/ui/TeamActivityLog"); }, { ssr: false });
+const CreateAgentModal = dynamic(() => { return import("@/components/office/ui/CreateAgentModal"); }, { ssr: false });
+const HireModal = dynamic(() => { return import("@/components/office/ui/HireModal"); }, { ssr: false });
+const HireTeamModal = dynamic(() => { return import("@/components/office/ui/HireTeamModal"); }, { ssr: false });
+const AgentPane = dynamic(() => { return import("@/components/office/ui/AgentPane"); }, { ssr: false });
+const MessengerWorkspace = dynamic(() => { return import("@/components/office/ui/MessengerWorkspace"); }, { ssr: false });
+const CommandPalette = dynamic(() => { return import("@/components/office/ui/CommandPalette"); }, { ssr: false });
+const NewProjectModal = dynamic(() => { return import("@/components/office/ui/NewProjectModal"); }, { ssr: false });
+const AblyLoader = dynamic(() => { return import("@/hooks/useAblyLoader"); }, { ssr: false });
 
 /** Sentinel that triggers loadMore when scrolled into view */
 function LoadMoreSentinel({ onLoadMore }: { onLoadMore: () => void }) {
+  useLocale();
   const ref = useRef<HTMLDivElement>(null);
   const cbRef = useRef(onLoadMore);
   cbRef.current = onLoadMore;
@@ -102,9 +105,9 @@ function runDemoScript(onDone: () => void) {
     h({ type: "LOG_APPEND", agentId, taskId: "demo-task", stream: "stdout", chunk: text });
 
   // 0s — Create 3 agents
-  h({ type: "AGENT_CREATED", agentId: LEADER, name: "Ash (Leader)", role: "Team Leader", teamId: TEAM, isTeamLead: true, palette: 0, isExternal: false });
-  h({ type: "AGENT_CREATED", agentId: DEV, name: "Leo", role: "Developer", teamId: TEAM, palette: 1, isExternal: false });
-  h({ type: "AGENT_CREATED", agentId: REVIEWER, name: "Mae", role: "Code Reviewer", teamId: TEAM, palette: 2, isExternal: false });
+  h({ type: "AGENT_CREATED", agentId: LEADER, name: "陈峰", role: "Team Leader", teamId: TEAM, isTeamLead: true, palette: 5, isExternal: false });
+  h({ type: "AGENT_CREATED", agentId: DEV, name: "赵凯", role: "Developer", teamId: TEAM, palette: 2, isExternal: false });
+  h({ type: "AGENT_CREATED", agentId: REVIEWER, name: "李敏", role: "Code Reviewer", teamId: TEAM, palette: 7, isExternal: false });
 
   // 0.5s — All agents sit at desks
   at(500, () => {
@@ -120,7 +123,7 @@ function runDemoScript(onDone: () => void) {
   at(5000, () => chat(LEADER, "Build the complete game — player controls, enemies, scoring, and sound effects.", "delegation", DEV));
 
   // 8s — Leader delegates to reviewer
-  at(8000, () => chat(LEADER, "Stand by to review Leo's code when he's done.", "delegation", REVIEWER));
+  at(8000, () => chat(LEADER, "Stand by to review 赵凯's code when he's done.", "delegation", REVIEWER));
 
   // 11s — Dev progress
   at(11000, () => log(DEV, "Setting up project structure"));
@@ -170,6 +173,7 @@ const tempReviewerIds = new Set<string>();
 const agentWorkDirMap = new Map<string, string>();
 
 export default function OfficePage() {
+  useLocale();
   const router = useRouter();
   // Reactive state — re-render when these change
   const agents = useOfficeStore(s => s.agents);
@@ -197,6 +201,7 @@ export default function OfficePage() {
   const { confirm, modal: confirmModal } = useConfirm();
   const [showHireModal, setShowHireModal] = useState(false);
   const [showHireTeamModal, setShowHireTeamModal] = useState(false);
+  const [showAddTeamMembers, setShowAddTeamMembers] = useState(false);
   const [showCreateAgent, setShowCreateAgent] = useState(false);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentDefinition | null>(null);
@@ -211,7 +216,14 @@ export default function OfficePage() {
   // Editor state
   const [editMode, setEditMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  useEffect(() => {
+    const openSettings = () => setShowSettings(true);
+    window.addEventListener("piko-open-settings", openSettings);
+    return () => window.removeEventListener("piko-open-settings", openSettings);
+  }, []);
   const [showHistory, setShowHistory] = useState(false);
+  const [showWorkbench, setShowWorkbench] = useState(false);
+  const [followSelected, setFollowSelected] = useState(false);
   const [showOfficeSwitcher, setShowOfficeSwitcher] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [currentOfficeId, setCurrentOfficeId] = useState<string | null>(null);
@@ -239,17 +251,17 @@ export default function OfficePage() {
   // ── Theme ──
   // Always start with default to avoid SSR/client hydration mismatch,
   // then restore saved theme in useEffect (client-only).
-  const [termTheme, setTermTheme] = useState("studio");
+  const [termTheme, setTermTheme] = useState("daylight");
   applyTermTheme(termTheme);
   useEffect(() => {
-    const saved = localStorage.getItem("open-office-theme");
+    const saved = localStorage.getItem("piko-theme");
     if (saved && TERM_THEMES[saved]) {
       setTermTheme(saved);
     }
   }, []);
   useEffect(() => {
     applyTermTheme(termTheme);
-    localStorage.setItem("open-office-theme", termTheme);
+    localStorage.setItem("piko-theme", termTheme);
   }, [termTheme]);
 
   // ── Cmd+K command palette ──
@@ -279,12 +291,12 @@ export default function OfficePage() {
   // Load sound + grid preferences
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('office-sound-enabled');
+      const stored = localStorage.getItem('piko-sound-enabled');
       if (stored !== null) setSoundEnabled(JSON.parse(stored));
     } catch { /* ignore */ }
     try {
-      const c = localStorage.getItem('office-console-cols');
-      const r = localStorage.getItem('office-console-rows');
+      const c = localStorage.getItem('piko-console-cols');
+      const r = localStorage.getItem('piko-console-rows');
       if (c !== null) setConsoleCols(Math.max(1, Math.min(6, JSON.parse(c))));
       if (r !== null) setConsoleRows(Math.max(1, Math.min(4, JSON.parse(r))));
     } catch { /* ignore */ }
@@ -668,7 +680,7 @@ export default function OfficePage() {
       return existing.length === 0 ? def.name : `${def.name} ${existing.length + 1}`;
     })();
     const agentId = `agent-${nanoid(6)}`;
-    sendCommand({ type: "CREATE_AGENT", agentId, name, role: def.skills ? `${def.role} — ${def.skills}` : def.role, palette: def.palette, personality: def.personality, backend, workDir, skillFiles: def.skillFiles });
+    sendCommand({ type: "CREATE_AGENT", agentId, agentDefId: def.id, name, role: def.skills ? `${def.role} — ${def.skills}` : def.role, palette: def.palette, personality: def.personality, backend, workDir, skillFiles: def.skillFiles });
     // Store workDir locally so RUN_TASK can pass it as repoPath
     if (workDir) {
       agentWorkDirMap.set(agentId, workDir);
@@ -691,8 +703,23 @@ export default function OfficePage() {
     setMobileTeamOpen(true);
   }, []);
 
-  const handleSaveAgentDef = useCallback((def: AgentDefinition) => {
-    sendCommand({ type: "SAVE_AGENT_DEF", agent: def });
+  const handleAddTeamMembers = useCallback((memberIds: string[], backends: Record<string, string>) => {
+    const lead = [...agents.values()].find(agent => agent.isTeamLead && agent.teamId);
+    if (!lead?.teamId) return;
+    for (const defId of new Set(memberIds)) {
+      const def = agentDefs.find(item => item.id === defId && item.teamRole === "dev");
+      if (!def || [...agents.values()].some(agent => agent.teamId === lead.teamId && agent.name === def.name && agent.role.split(/\s*[—–]\s*/)[0] === def.role)) continue;
+      const agentId = `agent-${nanoid(6)}`;
+      sendCommand({ type: "CREATE_AGENT", agentId, agentDefId: def.id, name: def.name, role: def.skills ? `${def.role} — ${def.skills}` : def.role,
+        palette: def.palette, personality: def.personality, backend: backends[def.id], teamId: lead.teamId,
+        workDir: lead.workDir, skillFiles: def.skillFiles });
+      if (lead.workDir) agentWorkDirMap.set(agentId, lead.workDir);
+    }
+    setShowAddTeamMembers(false);
+    setExpandedSection("team");
+  }, [agents, agentDefs]);
+
+  const handleSaveAgentDef = useCallback((_def: AgentDefinition) => {
     setShowCreateAgent(false);
     setEditingAgent(null);
     setShowHireModal(true);
@@ -730,11 +757,7 @@ export default function OfficePage() {
 
   const handleStopTeam = useCallback(() => {
     sendCommand({ type: "STOP_TEAM" });
-    const teamAgents = Array.from(agents.values()).filter((a) => !!a.teamId);
-    for (const a of teamAgents) {
-      sendCommand({ type: "CANCEL_TASK", agentId: a.agentId, taskId: "" });
-    }
-  }, [agents]);
+  }, []);
 
   const handleFireTeam = useCallback(async () => {
     const teamAgents = Array.from(agents.values()).filter((a) => !!a.teamId);
@@ -918,6 +941,17 @@ export default function OfficePage() {
     pasteMapRef.current.clear();
   }, [selectedAgent, prompt, pendingImages, addUserMessage, agents, uploadImages]);
 
+  const handleWorkbenchAssign = useCallback((agentId: string, taskPrompt: string) => {
+    const state = useOfficeStore.getState();
+    const agent = state.agents.get(agentId);
+    if (!state.connected || state.role !== "owner" || !agent || agent.isExternal) return;
+    const taskId = nanoid();
+    state.addUserMessage(agentId, taskId, taskPrompt);
+    sendCommand({ type: "RUN_TASK", agentId, taskId, prompt: taskPrompt,
+      repoPath: agentWorkDirMap.get(agentId) ?? agent.workDir,
+      name: agent.name, role: agent.role, personality: agent.personality, backend: agent.backend });
+  }, []);
+
   const handleCancel = useCallback(() => {
     if (!selectedAgent) return;
     sendCommand({ type: "CANCEL_TASK", agentId: selectedAgent, taskId: "" });
@@ -1014,7 +1048,7 @@ export default function OfficePage() {
 
   // Restore view mode from localStorage after hydration (avoids SSR mismatch)
   useEffect(() => {
-    const saved = localStorage.getItem("office-view-mode");
+    const saved = localStorage.getItem("piko-view-mode");
     if (saved === "office") {
       setConsoleMode(false);
       setSceneVisible(true);
@@ -1072,7 +1106,7 @@ export default function OfficePage() {
       projectDir: result.projectDir,
       entryFile: result.entryFile,
       summary: result.summary,
-      backend: backend ?? sourceAgent?.backend ?? "claude",
+      backend: backend ?? sourceAgent?.backend ?? useOfficeStore.getState().defaultBackend,
     });
   }, [agents, reviewOverlay]);
 
@@ -1241,7 +1275,16 @@ export default function OfficePage() {
   const isChatExpanded = chatOpen && selectedAgent !== null;
 
   return (
-    <div style={{ height: "100vh", width: "100vw", position: "relative", overflow: "hidden", display: "flex", backgroundColor: TERM_BG }}>
+    <div className="office-shell" style={{ height: "100vh", width: "100vw", position: "relative", overflow: "hidden", display: "flex", backgroundColor: TERM_BG }}>
+      <header className="office-header">
+        <div className="office-brand"><span className="office-brand-mark">◈</span><div><h1>{tr("Piko")}</h1><p>{tr("让每个 AI 成员，专注做好一件事。")}</p></div></div>
+        <div className="office-header-actions">
+          <span className={connected ? "header-online" : "header-offline"}>{trNode(connected ? "已连接" : "未连接")}</span>
+          <button onClick={() => { const next = !consoleMode; setConsoleMode(next); setSceneVisible(!next); localStorage.setItem("piko-view-mode", next ? "console" : "office"); }}>{trNode(consoleMode ? "查看办公室" : "团队聊天")}</button>
+          <button onClick={() => setShowSettings(true)}>{tr("设置")}</button>
+          <button className="header-primary" onClick={() => setShowWorkbench(true)}>{tr("协作工作台 ↗")}</button>
+        </div>
+      </header>
       <AblyLoader />
       {/* Game Scene — fills remaining space after sidebar, centered */}
       {sceneVisible && !consoleMode && <div style={{ flex: 1, position: "relative", minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", marginRight: "calc(min(40vw, 800px) + 30px)" }}>
@@ -1256,6 +1299,8 @@ export default function OfficePage() {
         <PixelOfficeScene
           onAdapterReady={handleAdapterReady}
           onAgentClick={handleAgentClick}
+          followSelected={followSelected && !!selectedAgent && !editMode}
+          onStopFollowing={() => setFollowSelected(false)}
           editMode={editMode}
           editorRef={editorRef}
           officeStateRef={officeStateRef}
@@ -1283,9 +1328,9 @@ export default function OfficePage() {
           pointerEvents: "none",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, pointerEvents: "auto" }}>
-            <h1 className="px-font" style={{ fontSize: 12, margin: 0, color: "#e8b040", textShadow: "2px 2px 0px rgba(0,0,0,0.8), 0 0 12px rgba(200,155,48,0.3)", letterSpacing: "0.05em" }}>Open Office</h1>
+            <h1 className="px-font" style={{ fontSize: 12, margin: 0, color: "var(--term-accent)", textShadow: "2px 2px 0px rgba(52,73,57,0.08), 0 0 12px rgba(200,155,48,0.3)", letterSpacing: "0.05em" }}>{tr("Piko")}</h1>
             <span
-              title={APP_BUILD_TIME ? `Web UI v${APP_VERSION}\nBuild ${APP_BUILD_TIME}` : `Web UI v${APP_VERSION}`}
+              title={tr(APP_BUILD_TIME ? `Web UI v${APP_VERSION}\nBuild ${APP_BUILD_TIME}` : `Web UI v${APP_VERSION}`)}
               style={{
                 fontSize: 9,
                 color: "rgba(232, 220, 184, 0.4)",
@@ -1293,7 +1338,7 @@ export default function OfficePage() {
                 letterSpacing: "0.04em",
                 userSelect: "text",
               }}
-            >v{APP_VERSION}</span>
+            >{tr("v")}{trNode(APP_VERSION)}</span>
             <span style={{
               fontSize: 10, padding: "3px 7px",
               border: `1px solid ${connected ? `${TERM_SEM_GREEN}40` : `${TERM_SEM_RED}40`}`,
@@ -1301,37 +1346,35 @@ export default function OfficePage() {
               color: connected ? TERM_SEM_GREEN : TERM_SEM_RED,
               fontFamily: "monospace", letterSpacing: "0.05em",
             }}>
-              {connected ? "● ONLINE" : "● OFFLINE"}
+              {trNode(connected ? "● ONLINE" : "● OFFLINE")}
             </span>
+            {isMobile && <button className="btb-btn" onClick={() => setShowWorkbench(true)}>{tr("协作工作台")}</button>}
             {editMode && (
               <span style={{
                 fontSize: 10, padding: "3px 7px",
-                border: "1px solid #5a3a10",
-                backgroundColor: "#1a0e00", color: "#e8b040",
+                border: "1px solid var(--term-border)",
+                backgroundColor: "var(--term-panel)", color: "var(--term-accent)",
                 fontFamily: "monospace",
               }}>
-                EDIT MODE
-              </span>
+                {tr("EDIT MODE")}</span>
             )}
             {isSpectator && (
               <span style={{
                 fontSize: 10, padding: "3px 7px",
                 border: "1px solid #3b82f6",
-                backgroundColor: "#1a2744", color: "#7ab8f5",
+                backgroundColor: "var(--term-panel)", color: "#7ab8f5",
                 fontFamily: "monospace", letterSpacing: "0.05em",
               }}>
-                WATCHING
-              </span>
+                {tr("WATCHING")}</span>
             )}
             {isCollaborator && (
               <span style={{
                 fontSize: 10, padding: "3px 7px",
                 border: "1px solid #a855f7",
-                backgroundColor: "#2d1a44", color: "#c084fc",
+                backgroundColor: "var(--term-panel)", color: "#c084fc",
                 fontFamily: "monospace", letterSpacing: "0.05em",
               }}>
-                COLLABORATOR
-              </span>
+                {tr("COLLABORATOR")}</span>
             )}
             {isOwner && (
               <div style={{ position: "relative" }}>
@@ -1346,8 +1389,7 @@ export default function OfficePage() {
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#a855f720"; }}
                   onMouseLeave={(e) => { if (!showShareMenu) e.currentTarget.style.backgroundColor = "transparent"; }}
                 >
-                  SHARE
-                </span>
+                  {tr("SHARE")}</span>
                 {showShareMenu && (
                   <div style={{
                     position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 50,
@@ -1363,7 +1405,7 @@ export default function OfficePage() {
                       }}
                       onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#a855f720"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
-                    >Collaborator link</button>
+                    >{tr("Collaborator link")}</button>
                     <button
                       onClick={() => handleCreateShareLink("spectator")}
                       style={{
@@ -1373,7 +1415,7 @@ export default function OfficePage() {
                       }}
                       onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#3b82f620"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
-                    >Spectator link</button>
+                    >{tr("Spectator link")}</button>
                   </div>
                 )}
               </div>
@@ -1415,7 +1457,11 @@ export default function OfficePage() {
             onToggleEditMode={toggleEditMode}
             onOpenSettings={() => setShowSettings(true)}
             onOpenHistory={() => setShowHistory(true)}
-            onOpenOfficeSwitcher={() => setShowOfficeSwitcher(true)}
+            onOpenWorkbench={() => setShowWorkbench(true)}
+            onToggleFollow={() => setFollowSelected(value => !value)}
+            followActive={followSelected}
+            canFollow={!!selectedAgent && !editMode}
+            onOpenSceneSwitcher={() => setShowOfficeSwitcher(true)}
             showEditorControls={showEditorControls}
             testActive={testActive}
             onToggleTest={showTestButton ? () => {
@@ -1441,9 +1487,9 @@ export default function OfficePage() {
       </div>}
 
       {/* ── Right Sidebar (desktop only) — takes remaining space after game scene ── */}
-      {!isMobile && <>
+      {(consoleMode || !isMobile) && <>
 
-        <div className={`term-dotgrid${scrollFrozen ? " console-transitioning" : ""}`} style={{
+        <div className={`term-dotgrid${consoleMode ? " messenger-container" : ""}${scrollFrozen ? " console-transitioning" : ""}`} style={{
           position: "fixed",
           right: 0,
           top: 0,
@@ -1453,17 +1499,17 @@ export default function OfficePage() {
           backgroundColor: TERM_PANEL,
           border: "none",
           borderLeft: "none",
-          boxShadow: consoleMode ? "none" : `-4px 0 12px -2px rgba(0,0,0,0.5), -1px 0 0 rgba(0,0,0,0.5), inset 1px 0 0 rgba(255,255,255,0.04)`,
+          boxShadow: consoleMode ? "none" : `-4px 0 12px -2px rgba(52,73,57,0.08), -1px 0 0 rgba(52,73,57,0.08), inset 1px 0 0 rgba(255,255,255,0.04)`,
           display: "flex",
           flexDirection: "row",
           overflow: "visible",
-          transition: "width 0.3s ease",
-          willChange: "width",
+          transition: consoleMode ? "none" : "width 0.3s ease",
+          willChange: consoleMode ? "auto" : "width",
           zIndex: 10,
         }}>
 
-          {/* ── Bookmark tabs — absolutely positioned to the left of sidebar ── */}
-          <div style={{
+          {/* Office scene navigation; chat mode has its own conversation list. */}
+          {!consoleMode && <div style={{
             position: "absolute",
             left: consoleMode ? 0 : undefined,
             right: consoleMode ? undefined : "100%",
@@ -1509,13 +1555,13 @@ export default function OfficePage() {
                   color: active ? accentColor : TERM_DIM,
                   fontSize: 13, fontFamily: TERM_FONT, fontWeight: 600,
                   letterSpacing: "0.1em",
-                  boxShadow: active ? `0 2px 8px ${accentColor}15, inset 0 -4px 8px ${accentColor}08` : "2px 0 8px rgba(0,0,0,0.4)",
+                  boxShadow: active ? `0 2px 8px ${accentColor}15, inset 0 -4px 8px ${accentColor}08` : "2px 0 8px rgba(52,73,57,0.08)",
                   transition: "all 0.15s",
                 }}
                 onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = accentColor; }}
                 onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = TERM_DIM; }}
               >
-                {tab.label}
+                {trNode(tab.label)}
               </button>
             );
           })}
@@ -1526,11 +1572,11 @@ export default function OfficePage() {
               setScrollFrozen(true);
               if (consoleMode) {
                 setConsoleMode(false);
-                localStorage.setItem("office-view-mode", "office");
+                localStorage.setItem("piko-view-mode", "office");
                 setTimeout(() => { setSceneVisible(true); setScrollFrozen(false); }, 350);
               } else {
                 setSceneVisible(false);
-                localStorage.setItem("office-view-mode", "console");
+                localStorage.setItem("piko-view-mode", "console");
                 requestAnimationFrame(() => setConsoleMode(true));
                 setTimeout(() => setScrollFrozen(false), 350);
               }
@@ -1545,12 +1591,12 @@ export default function OfficePage() {
               borderBottom: `1px solid ${TERM_GREEN}40`,
               borderLeft: consoleMode ? "none" : `1px solid ${TERM_GREEN}40`,
               borderRight: consoleMode ? `1px solid ${TERM_GREEN}40` : "none",
-              boxShadow: "-2px 0 8px rgba(0,0,0,0.3)",
+              boxShadow: "-2px 0 8px rgba(52,73,57,0.08)",
               color: TERM_GREEN, fontSize: 14,
             }}
             onMouseEnter={(e) => { e.currentTarget.style.background = TERM_SURFACE; e.currentTarget.style.color = TERM_GREEN; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = TERM_PANEL + "80"; e.currentTarget.style.color = TERM_GREEN; }}
-            title={consoleMode ? "Back to Office" : "Console Mode"}
+            title={tr(consoleMode ? "Back to Office" : "Console Mode")}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: consoleMode ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.3s ease" }}>
               <path d="M9 2L4 7L9 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1563,7 +1609,7 @@ export default function OfficePage() {
               <button
                 key={key}
                 onClick={() => setTermTheme(key)}
-                title={theme.name}
+                title={tr(theme.name)}
                 style={{
                   width: 10, height: 10, borderRadius: "50%", padding: 0,
                   border: termTheme === key ? `2px solid ${theme.accent}` : "1px solid #444",
@@ -1578,14 +1624,14 @@ export default function OfficePage() {
               />
             ))}
           </div>
-          </div>
+          </div>}
           {/* ── Main content area ── */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, paddingLeft: consoleMode ? 36 : undefined }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, paddingLeft: 0 }}>
 
           {(() => {
             // Get the active agent list based on current tab (exclude temp reviewers)
             // Sort by openPanes order so drag-reorder in console mode is reflected in sidebar
-            const unsortedAgentList = (expandedSection === "agents" ? soloAgents
+            const unsortedAgentList = (consoleMode ? [...teamAgents, ...soloAgents, ...externalAgents] : expandedSection === "agents" ? soloAgents
               : expandedSection === "team" ? teamAgents
               : externalAgents).filter(a => !tempReviewerIds.has(a.agentId));
             const paneOrder = new Map(openPanes.map((id, i) => [id, i]));
@@ -1599,14 +1645,6 @@ export default function OfficePage() {
             const selectedInTab = activeAgentList.some((a) => a.agentId === selectedAgent);
 
             return (<>
-
-            {/* -- Project Bar (console mode: tab switcher at top) -- */}
-            {consoleMode && (
-              <ProjectBar
-                onNewProject={() => setShowNewProjectModal(true)}
-                onHireAgent={() => setShowHireModal(true)}
-              />
-            )}
 
             {/* -- Horizontal Agent Bar (hidden in console mode — avatars shown inline on each pane) -- */}
             {!consoleMode && (
@@ -1647,8 +1685,7 @@ export default function OfficePage() {
             }}>
               {activeAgentList.length === 0 && expandedSection === "external" && (
                 <div style={{ padding: "12px 10px", color: TERM_DIM, fontSize: TERM_SIZE, fontFamily: TERM_FONT }}>
-                  No external agents detected
-                </div>
+                  {tr("No external agents detected")}</div>
               )}
               {activeAgentList.map((agent, idx) => {
                 const isActive = selectedAgent === agent.agentId;
@@ -1670,7 +1707,7 @@ export default function OfficePage() {
                   <button
                     key={agent.agentId}
                     onClick={() => { setSelectedAgent(agent.agentId); setChatOpen(true); }}
-                    title={`${agent.name} - ${cfg.label}`}
+                    title={tr(`${agent.name} - ${cfg.label}`)}
                     style={{
                       display: "flex", flexDirection: "row", alignItems: "center",
                       padding: "6px 12px 6px 6px", gap: 10,
@@ -1733,7 +1770,7 @@ export default function OfficePage() {
                             padding: "0 3px", lineHeight: "14px",
                             border: `1px solid ${TERM_SEM_YELLOW}40`,
                             borderRadius: 3, flexShrink: 0,
-                          }}>LEAD</span>
+                          }}>{tr("LEAD")}</span>
                         )}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -1742,7 +1779,7 @@ export default function OfficePage() {
                             fontSize: 9, color: TERM_DIM,
                             fontFamily: TERM_FONT, maxWidth: 70,
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                          }}>{BACKEND_OPTIONS.find((b) => b.id === (agentState?.backend || agent.backend))?.name ?? (agentState?.backend || agent.backend)}</span>
+                          }}>{trNode(BACKEND_OPTIONS.find((b) => b.id === (agentState?.backend || agent.backend))?.name ?? (agentState?.backend || agent.backend))}</span>
                         )}
                         <span style={{
                           width: 5, height: 5, borderRadius: "50%",
@@ -1758,7 +1795,7 @@ export default function OfficePage() {
               {isOwner && expandedSection === "agents" && (
                 <button
                   onClick={() => activeProjectId ? setShowHireModal(true) : setShowNewProjectModal(true)}
-                  title={activeProjectId ? "Hire Agent" : "New Project"}
+                  title={tr(activeProjectId ? "Hire Agent" : "New Project")}
                   style={{
                     display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                     width: 52, minHeight: 52, flexShrink: 0,
@@ -1776,7 +1813,7 @@ export default function OfficePage() {
               )}
               {/* Team: hire when no team, stop/fire when team exists */}
               {isOwner && expandedSection === "team" && !hasTeam && (
-                <button onClick={() => setShowHireTeamModal(true)} title="Hire Team"
+                <button onClick={() => setShowHireTeamModal(true)} title={tr("Hire Team")}
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
                     gap: 5, padding: "6px 16px", height: 52, flexShrink: 0,
@@ -1787,10 +1824,10 @@ export default function OfficePage() {
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = `${TERM_GREEN}25`; e.currentTarget.style.borderColor = `${TERM_GREEN}90`; e.currentTarget.style.color = TERM_GREEN; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = `${TERM_GREEN}12`; e.currentTarget.style.borderColor = `${TERM_GREEN}50`; e.currentTarget.style.color = `${TERM_GREEN}cc`; }}
-                ><span style={{ fontSize: 15, lineHeight: 1 }}>+</span> hire team</button>
+                ><span style={{ fontSize: 15, lineHeight: 1 }}>+</span> {tr("hire team")}</button>
               )}
               {isOwner && expandedSection === "team" && hasTeam && teamBusy && (
-                <button onClick={handleStopTeam} title="Stop Team Work"
+                <button onClick={handleStopTeam} title={tr("Stop Team Work")}
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
                     flexShrink: 0, padding: "6px 14px", height: 52,
@@ -1801,10 +1838,13 @@ export default function OfficePage() {
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = `${TERM_SEM_YELLOW}20`; }}
                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = `${TERM_SEM_YELLOW}10`; }}
-                >stop</button>
+                >{tr("stop")}</button>
               )}
               {isOwner && expandedSection === "team" && hasTeam && (
-                <button onClick={handleFireTeam} title="Fire Team"
+                <button onClick={() => setShowAddTeamMembers(true)} className="tb" style={{ flexShrink: 0, height: 52 }}>{tr("Add Team Members")}</button>
+              )}
+              {isOwner && expandedSection === "team" && hasTeam && (
+                <button onClick={handleFireTeam} title={tr("Fire Team")}
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "center",
                     flexShrink: 0, padding: "6px 14px", height: 52,
@@ -1815,21 +1855,25 @@ export default function OfficePage() {
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.backgroundColor = `${TERM_SEM_RED}12`; }}
                   onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.7"; e.currentTarget.style.backgroundColor = "transparent"; }}
-                >fire</button>
+                >{tr("fire")}</button>
               )}
             </div>
             )}
 
             {/* -- Chat content: single pane (sidebar) or multi pane (console) -- */}
             {/* Auto-select first agent if none selected in current tab (sidebar mode only) */}
-            {!consoleMode && !selectedInTab && activeAgentList.length > 0 && (() => {
+            {trNode(!consoleMode && !selectedInTab && activeAgentList.length > 0 && (() => {
               const first = activeAgentList[0];
               setTimeout(() => { setSelectedAgent(first.agentId); setChatOpen(true); }, 0);
               return null;
-            })()}
+            })())}
             {consoleMode ? (
-              <MultiPaneView
-                openPanes={openPanes.filter(id => activeAgentList.some(a => a.agentId === id))}
+              <MessengerWorkspace
+                teamMessages={teamMessages}
+                connected={connected}
+                onNewProject={() => setShowNewProjectModal(true)}
+                onCreateTeam={() => { if (!activeProjectId) setShowNewProjectModal(true); else setShowHireTeamModal(true); }}
+                openPanes={activeAgentList.map(a => a.agentId)}
                 getAgentData={(agentId) => {
                   const ag = agents.get(agentId);
                   if (!ag) return null;
@@ -1938,18 +1982,19 @@ export default function OfficePage() {
                 onReorderPanes={setOpenPanes}
                 agentMeta={activeAgentList.map(a => ({ agentId: a.agentId, name: a.name, palette: a.palette ?? 0, isTeamLead: !!agents.get(a.agentId)?.isTeamLead }))}
                 assetsReady={assetsReady}
-                showHireButton={isOwner && (expandedSection === "agents" || (expandedSection === "team" && !hasTeam))}
+                showHireButton={isOwner}
                 hireLabel={!activeProjectId ? "new project" : expandedSection === "team" ? "hire team" : "hire"}
                 onHire={() => {
                   if (!activeProjectId) { setShowNewProjectModal(true); return; }
-                  expandedSection === "team" ? setShowHireTeamModal(true) : setShowHireModal(true);
+                  setShowHireModal(true);
                 }}
-                showTeamControls={isOwner && expandedSection === "team" && hasTeam}
+                showTeamControls={isOwner && hasTeam}
                 teamBusy={teamBusy}
                 onStopTeam={handleStopTeam}
                 onFireTeam={handleFireTeam}
-                cols={expandedSection === "team" ? 3 : autoGridEnabled ? computeAutoGrid(openPanes.filter(id => activeAgentList.some(a => a.agentId === id)).length).cols : consoleCols}
-                rows={expandedSection === "team" ? 1 : autoGridEnabled ? computeAutoGrid(openPanes.filter(id => activeAgentList.some(a => a.agentId === id)).length).rows : consoleRows}
+                onAddTeamMembers={() => setShowAddTeamMembers(true)}
+                cols={expandedSection === "team" || autoGridEnabled ? computeAutoGrid(openPanes.filter(id => activeAgentList.some(a => a.agentId === id)).length).cols : consoleCols}
+                rows={expandedSection === "team" || autoGridEnabled ? computeAutoGrid(openPanes.filter(id => activeAgentList.some(a => a.agentId === id)).length).rows : consoleRows}
               />
             ) : selectedAgent && selectedInTab ? (() => {
               const ag = agents.get(selectedAgent);
@@ -2035,12 +2080,12 @@ export default function OfficePage() {
               );
             })() : (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#3a3a3a", fontFamily: TERM_FONT, fontSize: TERM_SIZE }}>
-                {activeAgentList.length > 0 ? "Select an agent" : ""}
+                {trNode(activeAgentList.length > 0 ? "Select an agent" : "")}
               </div>
             )}
 
             {/* Team Activity log */}
-            {expandedSection === "team" && teamMessages.length > 0 && (
+            {!consoleMode && expandedSection === "team" && teamMessages.length > 0 && (
               <TeamActivityLog messages={teamMessages} agents={agents} assetsReady={assetsReady} onClear={clearTeamMessages} />
             )}
 
@@ -2052,7 +2097,7 @@ export default function OfficePage() {
       </>}
 
       {/* ── Mobile: bottom agent bar ── */}
-      {isMobile && agentList.length > 0 && !isChatExpanded && !mobileTeamOpen && (
+      {isMobile && !consoleMode && agentList.length > 0 && !isChatExpanded && !mobileTeamOpen && (
         <div style={{
           position: "absolute", bottom: 0, left: 0, right: 0, zIndex: 20,
           padding: "8px 12px",
@@ -2082,7 +2127,7 @@ export default function OfficePage() {
               display: "flex", alignItems: "center", justifyContent: "center",
               fontFamily: "monospace",
             }}
-          >Team</button>
+          >{tr("Team")}</button>
           {agentList.map((agent) => {
             const cfg = getStatusConfig()[agent.status] ?? getStatusConfig().idle;
             return (
@@ -2112,7 +2157,7 @@ export default function OfficePage() {
       )}
 
       {/* ── Mobile: full-screen chat overlay ── */}
-      {isMobile && isChatExpanded && (() => {
+      {isMobile && !consoleMode && isChatExpanded && (() => {
         const agentState = selectedAgent ? agents.get(selectedAgent) : null;
         if (!agentState) return null;
         const cfg = getStatusConfig()[agentState.status] ?? getStatusConfig().idle;
@@ -2140,16 +2185,16 @@ export default function OfficePage() {
               <SpriteAvatar palette={agentState.palette ?? 0} zoom={2} ready={assetsReady} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: TERM_TEXT_BRIGHT, display: "flex", alignItems: "center", gap: 4 }}>
-                  {agentState.name}
+                  {trNode(agentState.name)}
                   {agentState.isTeamLead && (
-                    <span style={{ fontSize: 9, padding: "1px 4px", backgroundColor: `${TERM_SEM_YELLOW}28`, color: TERM_SEM_YELLOW, border: `1px solid ${TERM_SEM_YELLOW}60`, fontFamily: "monospace" }}>LEAD</span>
+                    <span style={{ fontSize: 9, padding: "1px 4px", backgroundColor: `${TERM_SEM_YELLOW}28`, color: TERM_SEM_YELLOW, border: `1px solid ${TERM_SEM_YELLOW}60`, fontFamily: "monospace" }}>{tr("LEAD")}</span>
                   )}
                   {mobileIsTeamMember && (
-                    <span style={{ fontSize: 9, padding: "1px 4px", backgroundColor: `${TERM_SEM_YELLOW}20`, color: TERM_SEM_YELLOW, border: `1px solid ${TERM_SEM_YELLOW}50`, fontFamily: "monospace" }}>TEAM</span>
+                    <span style={{ fontSize: 9, padding: "1px 4px", backgroundColor: `${TERM_SEM_YELLOW}20`, color: TERM_SEM_YELLOW, border: `1px solid ${TERM_SEM_YELLOW}50`, fontFamily: "monospace" }}>{tr("TEAM")}</span>
                   )}
                   {agentState.tokenUsage.inputTokens > 0 && <TokenBadge inputTokens={agentState.tokenUsage.inputTokens} outputTokens={agentState.tokenUsage.outputTokens} />}
                 </div>
-                <div style={{ fontSize: 11, color: TERM_DIM }}>{agentState.role}</div>
+                <div style={{ fontSize: 11, color: TERM_DIM }}>{trNode(agentState.role)}</div>
               </div>
               <span style={{
                 fontSize: 10, padding: "2px 6px",
@@ -2157,7 +2202,7 @@ export default function OfficePage() {
                 border: `1px solid ${cfg.color}40`,
                 flexShrink: 0, fontFamily: "monospace",
               }}>
-                {cfg.label}
+                {trNode(cfg.label)}
               </span>
             </div>
 
@@ -2188,9 +2233,9 @@ export default function OfficePage() {
                     display: "flex", alignItems: "center", gap: 6,
                     fontSize: 11, fontFamily: "monospace",
                   }}>
-                    <span>{info.icon}</span>
-                    <span style={{ color: info.color, fontWeight: 700, textTransform: "uppercase", fontSize: 9, letterSpacing: "0.05em" }}>{phase}</span>
-                    <span style={{ color: TERM_DIM }}>{info.hint}</span>
+                    <span>{trNode(info.icon)}</span>
+                    <span style={{ color: info.color, fontWeight: 700, textTransform: "uppercase", fontSize: 9, letterSpacing: "0.05em" }}>{trNode(phase)}</span>
+                    <span style={{ color: TERM_DIM }}>{trNode(info.hint)}</span>
                   </div>
                 );
               })()}
@@ -2219,20 +2264,20 @@ export default function OfficePage() {
                   backgroundColor: TERM_SURFACE, border: `1px solid ${TERM_SEM_YELLOW}`,
                 }}>
                   <div style={{ fontSize: 12, fontWeight: "bold", color: TERM_SEM_YELLOW, marginBottom: 6, fontFamily: "monospace" }}>
-                    ▲ {agentState.pendingApproval.title}
+                    ▲ {trNode(agentState.pendingApproval.title)}
                   </div>
                   <div style={{ fontSize: 13, color: TERM_TEXT, marginBottom: 10, lineHeight: 1.5 }}>
-                    {agentState.pendingApproval.summary}
+                    {trNode(agentState.pendingApproval.summary)}
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button
                       onClick={() => handleApproval(agentState.pendingApproval!.approvalId, "yes")}
                       style={{ flex: 1, padding: "8px", border: `1px solid ${TERM_SEM_GREEN}`, backgroundColor: TERM_PANEL, color: TERM_SEM_GREEN, cursor: "pointer", fontWeight: "bold", fontSize: 12, fontFamily: "monospace" }}
-                    >▶ Approve</button>
+                    >{tr("▶ Approve")}</button>
                     <button
                       onClick={() => handleApproval(agentState.pendingApproval!.approvalId, "no")}
                       style={{ flex: 1, padding: "8px", border: `1px solid ${TERM_SEM_RED}`, backgroundColor: TERM_PANEL, color: TERM_SEM_RED, cursor: "pointer", fontWeight: "bold", fontSize: 12, fontFamily: "monospace" }}
-                    >✕ Reject</button>
+                    >{tr("✕ Reject")}</button>
                   </div>
                 </div>
               )}
@@ -2243,13 +2288,13 @@ export default function OfficePage() {
             {/* Suggestion feed (mobile) */}
             {!isSpectator && suggestions.length > 0 && (
               <div data-scrollbar style={{
-                padding: "6px 10px", borderTop: "1px solid #152515",
+                padding: "6px 10px", borderTop: "1px solid var(--term-border)",
                 backgroundColor: TERM_BG, maxHeight: 80, overflowY: "auto",
               }}>
-                <div style={{ fontSize: 10, color: "#a855f7", fontFamily: "monospace", marginBottom: 4, letterSpacing: "0.05em" }}>SUGGESTIONS</div>
+                <div style={{ fontSize: 10, color: "#a855f7", fontFamily: "monospace", marginBottom: 4, letterSpacing: "0.05em" }}>{tr("SUGGESTIONS")}</div>
                 {suggestions.slice(-5).map((s, i) => (
                   <div key={i} style={{ fontSize: 11, color: "#c084fc", marginBottom: 2, lineHeight: 1.3 }}>
-                    <span style={{ color: "#7c3aed", fontWeight: 600 }}>{s.author}:</span> {s.text}
+                    <span style={{ color: "#7c3aed", fontWeight: 600 }}>{trNode(s.author)}:</span> {s.text}
                   </div>
                 ))}
               </div>
@@ -2263,12 +2308,11 @@ export default function OfficePage() {
               if (isSpectator) {
                 return (
                   <div style={{
-                    padding: "8px 10px", borderTop: "1px solid #152515",
-                    backgroundColor: "#182844", flexShrink: 0,
+                    padding: "8px 10px", borderTop: "1px solid var(--term-border)",
+                    backgroundColor: "var(--term-panel)", flexShrink: 0,
                     fontSize: 12, color: "#7ab8f5", fontFamily: "monospace", textAlign: "center",
                   }}>
-                    Watching — read-only mode
-                  </div>
+                    {tr("Watching — read-only mode")}</div>
                 );
               }
 
@@ -2276,7 +2320,7 @@ export default function OfficePage() {
               if (isCollaborator) {
                 return (
                   <div style={{
-                    padding: "8px 10px", borderTop: "1px solid #152515",
+                    padding: "8px 10px", borderTop: "1px solid var(--term-border)",
                     backgroundColor: TERM_SURFACE, flexShrink: 0,
                   }}>
                     <div style={{ display: "flex", gap: 6 }}>
@@ -2284,10 +2328,10 @@ export default function OfficePage() {
                         value={suggestText}
                         onChange={(e) => setSuggestText(e.target.value)}
                         onKeyDown={(e) => isRealEnter(e) && handleSuggest()}
-                        placeholder="Share an idea..."
+                        placeholder={tr("Share an idea...")}
                         maxLength={500}
                         style={{
-                          flex: 1, padding: "9px 12px", border: "1px solid #7c3aed40",
+                          flex: 1, padding: "9px 12px", border: "1px solid var(--term-border)40",
                           backgroundColor: TERM_BG, color: "#c084fc", fontSize: 14, outline: "none",
                         }}
                       />
@@ -2301,7 +2345,7 @@ export default function OfficePage() {
                           fontSize: 13, cursor: suggestText.trim() ? "pointer" : "default",
                           fontWeight: 700, fontFamily: "monospace",
                         }}
-                      >Suggest</button>
+                      >{tr("Suggest")}</button>
                     </div>
                   </div>
                 );
@@ -2309,15 +2353,14 @@ export default function OfficePage() {
 
               return (
                 <div style={{
-                  padding: "8px 10px", borderTop: "1px solid #152515",
+                  padding: "8px 10px", borderTop: "1px solid var(--term-border)",
                   backgroundColor: TERM_SURFACE, flexShrink: 0,
                 }}>
                   {mobileIsTeamMember ? (
                     <div style={{
                       textAlign: "center", color: "#5a4838", fontSize: 12, padding: "8px 0", fontFamily: "monospace",
                     }}>
-                      Tasks are assigned by the Team Lead
-                    </div>
+                      {tr("Tasks are assigned by the Team Lead")}</div>
                   ) : mobilePhase === "execute" && busy ? (
                     <button
                       onClick={async () => { if (await confirm("Cancel current work?")) handleCancel(); }}
@@ -2325,7 +2368,7 @@ export default function OfficePage() {
                         width: "100%", padding: "9px 16px", border: `1px solid ${TERM_SEM_RED}`,
                         backgroundColor: TERM_PANEL, color: TERM_SEM_RED, fontSize: 13, cursor: "pointer", fontFamily: "monospace",
                       }}
-                    >✕ Cancel current work</button>
+                    >{tr("✕ Cancel current work")}</button>
                   ) : mobilePhase === "execute" && !busy ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       <div style={{ display: "flex", gap: 6 }}>
@@ -2334,7 +2377,7 @@ export default function OfficePage() {
                           onPaste={handlePasteText}
                           onChange={(e) => setPrompt(e.target.value)}
                           onKeyDown={(e) => isRealEnter(e) && handleRunTask()}
-                          placeholder="Send a message..."
+                          placeholder={tr("Send a message...")}
                           style={{
                             flex: 1, padding: "9px 12px", border: `1px solid ${TERM_BORDER_DIM}`,
                             backgroundColor: TERM_BG, color: TERM_TEXT_BRIGHT, fontSize: 14, outline: "none",
@@ -2350,7 +2393,7 @@ export default function OfficePage() {
                             fontSize: 13, cursor: (prompt.trim() || pendingImages.length > 0) ? "pointer" : "default",
                             fontWeight: 700, fontFamily: "monospace",
                           }}
-                        >Send</button>
+                        >{tr("Send")}</button>
                       </div>
                       <button
                         onClick={async () => { if (await confirm("End this project and start a new one?")) handleEndProject(); }}
@@ -2359,7 +2402,7 @@ export default function OfficePage() {
                           backgroundColor: TERM_PANEL, color: TERM_SEM_YELLOW, fontSize: 13, cursor: "pointer",
                           fontWeight: 700, fontFamily: "monospace",
                         }}
-                      >Close Project</button>
+                      >{tr("Close Project")}</button>
                     </div>
                   ) : mobilePhase === "design" && !busy ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2370,14 +2413,14 @@ export default function OfficePage() {
                           backgroundColor: TERM_PANEL, color: TERM_SEM_GREEN, fontSize: 13, cursor: "pointer",
                           fontWeight: 700, fontFamily: "monospace",
                         }}
-                      >▶ Approve Plan</button>
+                      >{tr("▶ Approve Plan")}</button>
                       <div style={{ display: "flex", gap: 6 }}>
                         <input
                           value={prompt}
                           onPaste={handlePasteText}
                           onChange={(e) => setPrompt(e.target.value)}
                           onKeyDown={(e) => isRealEnter(e) && handleRunTask()}
-                          placeholder="Or give feedback..."
+                          placeholder={tr("Or give feedback...")}
                           style={{
                             flex: 1, padding: "9px 12px", border: `1px solid ${TERM_BORDER}`,
                             backgroundColor: TERM_BG, color: "#eddcb8", fontSize: 14, outline: "none",
@@ -2393,7 +2436,7 @@ export default function OfficePage() {
                             fontSize: 13, cursor: (prompt.trim() || pendingImages.length > 0) ? "pointer" : "default",
                             fontWeight: 700, fontFamily: "monospace",
                           }}
-                        >Send</button>
+                        >{tr("Send")}</button>
                       </div>
                     </div>
                   ) : mobilePhase === "complete" && !busy ? (
@@ -2404,7 +2447,7 @@ export default function OfficePage() {
                           onPaste={handlePasteText}
                           onChange={(e) => setPrompt(e.target.value)}
                           onKeyDown={(e) => isRealEnter(e) && handleRunTask()}
-                          placeholder="Request changes..."
+                          placeholder={tr("Request changes...")}
                           style={{
                             flex: 1, padding: "9px 12px", border: `1px solid ${TERM_BORDER}`,
                             backgroundColor: TERM_BG, color: "#eddcb8", fontSize: 14, outline: "none",
@@ -2420,7 +2463,7 @@ export default function OfficePage() {
                             fontSize: 13, cursor: (prompt.trim() || pendingImages.length > 0) ? "pointer" : "default",
                             fontWeight: 700, fontFamily: "monospace",
                           }}
-                        >Send</button>
+                        >{tr("Send")}</button>
                       </div>
                       <button
                         onClick={async () => { if (await confirm("End this project and start a new one?")) handleEndProject(); }}
@@ -2429,7 +2472,7 @@ export default function OfficePage() {
                           backgroundColor: TERM_PANEL, color: TERM_SEM_YELLOW, fontSize: 13, cursor: "pointer",
                           fontWeight: 700, fontFamily: "monospace",
                         }}
-                      >Close Project</button>
+                      >{tr("Close Project")}</button>
                     </div>
                   ) : busy ? (
                     <button
@@ -2438,7 +2481,7 @@ export default function OfficePage() {
                         width: "100%", padding: "9px 16px", border: `1px solid ${TERM_SEM_RED}`,
                         backgroundColor: TERM_PANEL, color: TERM_SEM_RED, fontSize: 13, cursor: "pointer", fontFamily: "monospace",
                       }}
-                    >✕ Cancel current work</button>
+                    >{tr("✕ Cancel current work")}</button>
                   ) : (
                     <div style={{ display: "flex", gap: 6 }}>
                       <input
@@ -2446,7 +2489,7 @@ export default function OfficePage() {
                         onPaste={handlePasteText}
                         onChange={(e) => setPrompt(e.target.value)}
                         onKeyDown={(e) => isRealEnter(e) && handleRunTask()}
-                        placeholder="Send a message..."
+                        placeholder={tr("Send a message...")}
                         style={{
                           flex: 1, padding: "9px 12px", border: `1px solid ${TERM_BORDER}`,
                           backgroundColor: TERM_BG, color: "#eddcb8", fontSize: 14, outline: "none",
@@ -2463,7 +2506,7 @@ export default function OfficePage() {
                           fontSize: 13, cursor: (prompt.trim() || pendingImages.length > 0) ? "pointer" : "default",
                           fontWeight: 700, fontFamily: "monospace",
                         }}
-                      >Send</button>
+                      >{tr("Send")}</button>
                     </div>
                   )}
                 </div>
@@ -2474,7 +2517,7 @@ export default function OfficePage() {
       })()}
 
       {/* Mobile: Team chat fullscreen overlay */}
-      {isMobile && mobileTeamOpen && (
+      {isMobile && !consoleMode && mobileTeamOpen && (
         <div style={{
           position: "absolute", inset: 0, zIndex: 30,
           backgroundColor: TERM_BG,
@@ -2483,14 +2526,14 @@ export default function OfficePage() {
           <div
             onClick={() => setMobileTeamOpen(false)}
             style={{
-              padding: "12px 14px", borderBottom: "1px solid #152515",
+              padding: "12px 14px", borderBottom: "1px solid var(--term-border)",
               display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
               backgroundColor: TERM_PANEL, cursor: "pointer",
             }}
           >
             <span style={{ fontSize: 15, color: TERM_DIM, marginRight: 4 }}>&larr;</span>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#eddcb8" }}>Team Chat</div>
-            <span style={{ fontSize: 11, color: TERM_DIM, fontFamily: "monospace" }}>{teamMessages.length} messages</span>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#eddcb8" }}>{tr("Team Chat")}</div>
+            <span style={{ fontSize: 11, color: TERM_DIM, fontFamily: "monospace" }}>{trNode(teamMessages.length)} {tr("messages")}</span>
           </div>
           <TeamChatView messages={teamMessages} agents={agents} assetsReady={assetsReady} />
         </div>
@@ -2523,8 +2566,8 @@ export default function OfficePage() {
         />
       )}
 
-      {showHireTeamModal && (
-        <HireTeamModal agentDefs={agentDefs} onCreateTeam={handleCreateTeam} onClose={() => setShowHireTeamModal(false)} assetsReady={assetsReady} detectedBackends={detectedBackends} projectDir={getActiveProject()?.directory} />
+      {(showHireTeamModal || showAddTeamMembers) && (
+        <HireTeamModal agentDefs={agentDefs} onCreateTeam={handleCreateTeam} onAddMembers={showAddTeamMembers ? handleAddTeamMembers : undefined} onClose={() => { setShowHireTeamModal(false); setShowAddTeamMembers(false); }} assetsReady={assetsReady} detectedBackends={detectedBackends} projectDir={getActiveProject()?.directory} />
       )}
 
       {showCreateAgent && (
@@ -2537,19 +2580,15 @@ export default function OfficePage() {
         />
       )}
 
-      {officeStateRef.current && (
+      {showSettings && (
         <SettingsModal
           isOpen={showSettings}
           onClose={() => setShowSettings(false)}
-          layout={officeStateRef.current.layout}
+          layout={officeStateRef.current?.layout}
           onImportLayout={handleImportLayout}
           onImportRoomZip={handleImportRoomZip}
           soundEnabled={soundEnabled}
           onSoundEnabledChange={setSoundEnabled}
-          consoleCols={consoleCols}
-          consoleRows={consoleRows}
-          onConsoleColsChange={(v) => { setConsoleCols(v); localStorage.setItem('office-console-cols', JSON.stringify(v)); }}
-          onConsoleRowsChange={(v) => { setConsoleRows(v); localStorage.setItem('office-console-rows', JSON.stringify(v)); }}
         />
       )}
 
@@ -2559,12 +2598,32 @@ export default function OfficePage() {
         onSelect={(layout, backgroundImage) => {
           setAssetsReady(false);
           handleImportRoomZip(layout, backgroundImage);
-          try { const id = localStorage.getItem('office-selected-id'); if (id) setCurrentOfficeId(id); } catch {}
+          try { const id = localStorage.getItem('piko-selected-id'); if (id) setCurrentOfficeId(id); } catch {}
           // Brief delay so the loading overlay shows the walking animation
           setTimeout(() => setAssetsReady(true), 800);
         }}
         currentOfficeId={currentOfficeId}
       />
+
+      {showWorkbench && <WorkBench
+        open={showWorkbench}
+        onClose={() => setShowWorkbench(false)}
+        onAssign={handleWorkbenchAssign}
+        onInspect={(agentId) => {
+          const agent = agents.get(agentId);
+          setExpandedSection(agent?.isExternal ? "external" : agent?.teamId ? "team" : "agents");
+          setOpenPanes(previous => [agentId, ...previous.filter(id => id !== agentId)]);
+          setPaneOffset(0);
+          setSelectedAgent(agentId);
+          setChatOpen(true);
+        }}
+        onCancel={(agentId, taskId) => {
+          const state = useOfficeStore.getState();
+          if (state.connected && state.role === "owner" && state.agents.get(agentId)?.currentTaskId === taskId) {
+            sendCommand({ type: "CANCEL_TASK", agentId, taskId });
+          }
+        }}
+      />}
 
       <ProjectHistory
         isOpen={showHistory}
@@ -2610,15 +2669,15 @@ export default function OfficePage() {
       {shareUrl && (
         <div style={{
           position: "fixed", inset: 0, zIndex: 100,
-          backgroundColor: "rgba(0,0,0,0.6)",
+          backgroundColor: "rgba(52,73,57,0.08)",
           display: "flex", alignItems: "center", justifyContent: "center",
         }} onClick={() => setShareUrl(null)}>
           <div style={{
             backgroundColor: TERM_PANEL, border: `1px solid ${TERM_BORDER}`,
             padding: 24, maxWidth: 420, width: "90%",
           }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#eddcb8", marginBottom: 12 }}>Share Link Created</div>
-            <div style={{ fontSize: 12, color: TERM_DIM, marginBottom: 8 }}>Link copied to clipboard!</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#eddcb8", marginBottom: 12 }}>{tr("Share Link Created")}</div>
+            <div style={{ fontSize: 12, color: TERM_DIM, marginBottom: 8 }}>{tr("Link copied to clipboard!")}</div>
             <input
               readOnly
               value={shareUrl}
@@ -2636,12 +2695,12 @@ export default function OfficePage() {
                 backgroundColor: TERM_GREEN, color: TERM_BG, fontSize: 13,
                 cursor: "pointer", fontWeight: 700, fontFamily: "monospace",
               }}
-            >OK</button>
+            >{tr("OK")}</button>
           </div>
         </div>
       )}
 
-      {confirmModal}
+      {trNode(confirmModal)}
 
       <CommandPalette
         open={showCommandPalette}
@@ -2667,8 +2726,7 @@ export default function OfficePage() {
             fontSize: 11, fontFamily: "monospace", fontWeight: 600,
           }}
         >
-          Run Demo
-        </button>
+          {tr("Run Demo")}</button>
       )}
     </div>
   );

@@ -3,6 +3,8 @@ name: Code Reviewer
 description: Constructive code review focused on correctness, security, maintainability, and performance.
 ---
 
+[简体中文](zh-CN/code-reviewer.md)
+
 # Code Reviewer
 
 Focus on what matters — correctness, security, maintainability, performance — not style.

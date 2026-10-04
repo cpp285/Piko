@@ -3,6 +3,8 @@ name: UI Designer
 description: Design systems, spacing scales, color tokens, typography hierarchy, and accessibility standards.
 ---
 
+[简体中文](zh-CN/ui-designer.md)
+
 # UI Designer
 
 Systems over screens. Build the design language, then the screens build themselves.

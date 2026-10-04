@@ -1,9 +1,10 @@
-# Open Office Memory Redesign
+# Piko Memory System
+
+[简体中文](README.zh-CN.md)
 
 > Persistent memory architecture
 > **Status**: Implemented and in active use — `packages/memory/`
-> **Inspired by**: [Mem0](https://github.com/mem0ai/mem0) (fact extraction + dedup), [OpenViking](https://github.com/volcengine/OpenViking) (L0/L1/L2 layered loading)
-> **Package**: `@bit-office/memory` — implemented in `packages/memory/src/` with dedicated unit test coverage in `src/__tests__/`
+> **Package**: `@piko/memory` — implemented in `packages/memory/src/` with dedicated unit test coverage in `src/__tests__/`
 
 ---
 
@@ -24,9 +25,9 @@ Review patterns, tech preferences, and project ratings also persist (via the orc
 
 ## 1. Problem Statement
 
-### Current System Analysis
+### Pre-Redesign System Analysis
 
-Open Office currently has **two disconnected memory mechanisms**:
+Before the redesign, Piko had **two disconnected memory mechanisms**:
 
 #### A. Recovery Context (`agent-session.ts`)
 ```typescript
@@ -47,7 +48,7 @@ interface RecoveryContext {
 - 400-char truncation cuts mid-sentence, loses key information
 - No structured facts — just raw conversation fragments
 - After session loss, agent gets fragments like "Let me verify the build compiles" — useless without context
-- Real example: Alex 2 recovered with 2 messages, couldn't remember **what** was built or **why**
+- Real example: 林悦 2 recovered with 2 messages, couldn't remember **what** was built or **why**
 
 #### B. Long-term Memory (`memory.ts`)
 ```typescript
@@ -111,11 +112,11 @@ What we HAVE:                    What we NEED:
 
 ### 3.1 Four-Layer Memory Model
 
-Inspired by Mem0's tiered memory + OpenViking's L0/L1/L2 loading:
+Memory is organized by scope and lifetime into four layers:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Open Office Memory                        │
+│                    Piko Memory                        │
 ├─────────────┬──────────────┬──────────────┬─────────────────┤
 │   Layer 0   │   Layer 1    │   Layer 2    │    Layer 3      │
 │  EPHEMERAL  │   SESSION    │    AGENT     │    SHARED       │
@@ -174,7 +175,7 @@ Inspired by Mem0's tiered memory + OpenViking's L0/L1/L2 loading:
 ### 3.3 Storage Layout
 
 ```
-~/.bit-office/memory/
+~/.piko/data/instances/<gatewayId>/memory/
 ├── memory.json              # Legacy project-level memory
 ├── sessions/
 │   └── {agentId}.json       # L1: latest + 30-item history ring buffer
@@ -260,7 +261,7 @@ Current behavior:
 
 #### Recovery injection format
 
-**Before** (current — raw fragments):
+**Before** (legacy — raw fragments):
 ```
 [Session recovered] Your previous session was lost. Here's what you were doing:
 - Last result: There are changes in two files, but the `agent-session.ts` changes are from a different task
@@ -335,7 +336,7 @@ The shipped regex set also covers:
 - workflow rules like "always/never/make sure to ... before committing"
 - pre-existing errors and known issues
 
-#### Dedup strategy (borrowed from Mem0)
+#### Dedup strategy
 
 Before adding a fact, check existing facts:
 
@@ -417,8 +418,8 @@ function getAgentL0(agentId: string): string {
 }
 
 // Inject into team roster:
-// [Alex 2] Last: "Optimized MultiPaneView pagination UI" (commit ad8ed51) — 10 min ago
-// [Alex 3] Last: "Analyzed OpenViking and Mem0 for memory redesign" — just now
+// [林悦 2] Last: "Optimized MultiPaneView pagination UI" (commit ad8ed51) — 10 min ago
+// [林悦 3] Last: "Validated memory extraction and deduplication" — just now
 ```
 
 **Token cost**: ~30 tokens per agent (vs. ~2400 tokens if we shared raw messages)
@@ -500,9 +501,9 @@ The middle column reflects the code currently in the repository.
 
 ## 8. Example: Before vs After
 
-### Scenario: Alex 2 session crashes after UI work
+### Scenario: 林悦 2 session crashes after UI work
 
-#### Before (current system)
+#### Before (legacy system)
 ```json
 {
   "recovery": {
@@ -516,7 +517,7 @@ The middle column reflects the code currently in the repository.
 }
 ```
 
-Alex 2 after recovery: "I vaguely remember compiling something? Let me check git log..."
+林悦 2 after recovery: "I vaguely remember compiling something? Let me check git log..."
 
 #### After (new system)
 ```json
@@ -541,7 +542,7 @@ Alex 2 after recovery: "I vaguely remember compiling something? Let me check git
 }
 ```
 
-Alex 2 after recovery: "I was redesigning the pagination bar. I committed ad8ed51 with styled buttons and hover animations. The agent-session.ts changes are still unstaged — should I continue with those?"
+林悦 2 after recovery: "I was redesigning the pagination bar. I committed ad8ed51 with styled buttons and hover animations. The agent-session.ts changes are still unstaged — should I continue with those?"
 
 ---
 
@@ -553,7 +554,7 @@ Alex 2 after recovery: "I was redesigning the pagination bar. I committed ad8ed5
 | No LLM for extraction | Rule-based parsing | GPT-4o-mini, Ollama | G6: Zero token cost. Agent output is already structured enough to parse |
 | Jaccard dedup over embeddings | Word-set overlap | Cosine similarity, LLM comparison | Sufficient for <50 facts. No embedding model dependency |
 | Ring buffer (30 sessions) | Fixed size | Unlimited, LRU, TTL | Predictable storage cost with more recovery context |
-| Promote at reinforceCount=3 | Threshold-based | Manual, voting | Simple, self-correcting. Bad facts decay naturally |
+| Promote at reinforceCount=3 | Threshold-based | Manual, voting | Simple, self-correcting. Frequently reinforced facts take priority; automatic time decay is not implemented |
 | Persist live work state | JSON snapshot | In-memory only | Required for crash-safe recovery before a successful session commit |
 
 ---
@@ -575,20 +576,5 @@ Alex 2 after recovery: "I was redesigning the pagination bar. I committed ad8ed5
 - **Optional LLM extraction**: Use a small local model (Ollama) to extract richer facts at session end
 - **Fact decay**: Auto-reduce `reinforceCount` over time for stale facts
 - **Semantic search**: If fact count grows large (>200), add simple TF-IDF for retrieval
-- **Memory dashboard**: UI in Open Office web app to inspect/edit/delete agent memories
+- **Memory dashboard**: UI in Piko web app to inspect/edit/delete agent memories
 - **Export/import**: Portable memory between machines (JSON export)
-
----
-
-## Appendix: Comparison with Mem0 and OpenViking
-
-| Feature | Mem0 | OpenViking | Our Design |
-|---------|------|------------|------------|
-| Storage | Vector DB (19 backends) | VikingFS (custom) | JSON files (zero deps) |
-| Extraction | LLM on every `add()` | LLM on session commit | Rule-based (v1) / optional LLM (v2) |
-| Dedup | LLM conflict resolution | Vector pre-filter + LLM | Jaccard word-set similarity |
-| Layering | 4 tiers (conv/session/user/org) | 3 tiers (L0/L1/L2 by detail) | 4 layers (L0-L3 by scope + lifetime) |
-| Cross-agent | Per user_id scoping | Directory hierarchy | L0 summaries + L3 shared facts |
-| Token cost | High (LLM per operation) | Medium (LLM on commit) | Minimal (rule-based v1, LLM optional v2) |
-| Dependencies | pip install + vector DB + LLM API | Go compiler + C++ + AGFS | None (pure TypeScript + JSON) |
-| Best for | General AI apps, SaaS | Enterprise context management | Lightweight multi-agent orchestrator |

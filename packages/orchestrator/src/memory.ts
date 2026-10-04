@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// AgentMemory — re-exports from @bit-office/memory
+// AgentMemory — re-exports from @piko/memory
 //
 // This file is a thin wrapper that maintains backward compatibility
 // for all existing consumers (orchestrator.ts, index.ts, gateway).
@@ -28,6 +28,6 @@ export {
   clearAgentWorkState,
   setStorageRoot,
   saveSessionHistory,
-} from "@bit-office/memory";
+} from "@piko/memory";
 
-export type { ReviewPattern, ProjectRecord } from "@bit-office/memory";
+export type { ReviewPattern, ProjectRecord } from "@piko/memory";

@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState, useCallback } from "react";
 import TermModal from "./primitives/TermModal";
@@ -9,16 +11,17 @@ function ConfirmModal({ message, onConfirm, onCancel }: {
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  useLocale();
   return (
     <TermModal
       open={true}
       onClose={onCancel}
       maxWidth={380}
-      title="Confirm"
+      title={tr("Confirm")}
       footer={
         <>
-          <TermButton variant="dim" onClick={onCancel}>No</TermButton>
-          <TermButton variant="danger" onClick={onConfirm}>Yes</TermButton>
+          <TermButton variant="dim" onClick={onCancel}>{tr("No")}</TermButton>
+          <TermButton variant="danger" onClick={onConfirm}>{tr("Yes")}</TermButton>
         </>
       }
     >
@@ -30,6 +33,7 @@ function ConfirmModal({ message, onConfirm, onCancel }: {
 }
 
 export function useConfirm() {
+  useLocale();
   const [state, setState] = useState<{ message: string; resolve: (v: boolean) => void } | null>(null);
   const confirm = useCallback((message: string): Promise<boolean> => {
     return new Promise((resolve) => {

@@ -1,5 +1,7 @@
 # How to Create a New Scene
 
+[简体中文](README.zh-CN.md)
+
 The office view uses a pluggable `SceneAdapter` interface. You can swap the pixel-art canvas for any rendering approach (3D, isometric, list view, etc.) by implementing 2 things:
 
 1. A **SceneAdapter** class (6 methods)
@@ -12,7 +14,7 @@ The office view uses a pluggable `SceneAdapter` interface. You can swap the pixe
 ```typescript
 // scene/MySceneAdapter.ts
 import type { SceneAdapter, AgentInfo, BubbleType } from "./SceneAdapter";
-import type { AgentStatus } from "@office/shared";
+import type { AgentStatus } from "@piko/shared";
 
 export class MySceneAdapter implements SceneAdapter {
   addAgent(agentId: string, info: AgentInfo) {

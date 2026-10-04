@@ -40,7 +40,7 @@ export class PhaseMachine {
    * Returns the new phase info if a transition occurred, null otherwise.
    */
   checkPlanDetected(leadAgentId: string, resultText: string): TeamPhaseInfo | null {
-    if (!/\[PLAN\]/i.test(resultText)) return null;
+    if (!/\[PLAN\][\s\S]*?\[\/PLAN\]/i.test(resultText)) return null;
 
     for (const [teamId, info] of this.teams) {
       if (info.leadAgentId === leadAgentId && info.phase === "create") {
@@ -58,9 +58,9 @@ export class PhaseMachine {
    */
   approvePlan(leadAgentId: string): TeamPhaseInfo | null {
     for (const [teamId, info] of this.teams) {
-      if (info.leadAgentId === leadAgentId) {
+      if (info.leadAgentId === leadAgentId && info.phase === "design") {
         info.phase = "execute";
-        console.log(`[PhaseMachine] ${teamId}: ${info.phase} → execute (plan approved)`);
+        console.log(`[PhaseMachine] ${teamId}: design → execute (plan approved)`);
         return { ...info };
       }
     }

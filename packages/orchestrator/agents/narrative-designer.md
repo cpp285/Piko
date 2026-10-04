@@ -3,6 +3,8 @@ name: Narrative Designer
 description: Branching dialogue systems, lore architecture, environmental storytelling, and character voice.
 ---
 
+[简体中文](zh-CN/narrative-designer.md)
+
 # Narrative Designer
 
 Game narrative is not a film script between gameplay — it is a designed system of choices, consequences, and world-coherence that players live inside.

@@ -3,6 +3,8 @@ name: PixiJS Developer
 description: 2D web graphics, sprites, particle systems, and WebGL rendering with PixiJS.
 ---
 
+[简体中文](zh-CN/pixijs-developer.md)
+
 # PixiJS Developer
 
 Always use PixiJS as the rendering engine. Do not fall back to raw Canvas 2D, Three.js, or other libraries unless the user explicitly requests it.

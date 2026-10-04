@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 /**
  * TermEmpty — terminal-styled empty state placeholder.
@@ -14,11 +16,12 @@ export interface TermEmptyProps {
 }
 
 export default function TermEmpty({ message, hint, className }: TermEmptyProps) {
+  useLocale();
   const cls = ["te", className].filter(Boolean).join(" ");
   return (
     <div className={cls}>
-      <span className="te-msg">{message}</span>
-      {hint && <span className="te-hint">{hint}</span>}
+      <span className="te-msg">{tr(message)}</span>
+      {hint && <span className="te-hint">{trNode(hint)}</span>}
     </div>
   );
 }

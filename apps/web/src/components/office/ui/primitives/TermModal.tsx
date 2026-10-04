@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useCallback } from "react";
 import {
@@ -57,6 +59,7 @@ export default function TermModal({
   footer,
   className,
 }: TermModalProps) {
+  useLocale();
   const handleOpenChange = useCallback(
     (isOpen: boolean) => {
       if (!isOpen) onClose();
@@ -73,24 +76,24 @@ export default function TermModal({
       >
         {title ? (
           <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
+            <DialogTitle>{trNode(title)}</DialogTitle>
             <button
               className="px-2 py-0.5 border border-border bg-transparent text-muted-foreground font-mono text-term cursor-pointer leading-none transition-colors duration-fast hover:text-foreground hover:border-term-text-bright"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={tr("Close")}
             >
               &times;
             </button>
           </DialogHeader>
         ) : (
-          <DialogTitle className="sr-only">Dialog</DialogTitle>
+          <DialogTitle className="sr-only">{tr("Dialog")}</DialogTitle>
         )}
         {/* Hidden description for accessibility when no visible description */}
         <DialogDescription className="sr-only">
-          {title ? `${title} dialog` : "Dialog"}
+          {trNode(title ? `${title} dialog` : "Dialog")}
         </DialogDescription>
-        <DialogBody>{children}</DialogBody>
-        {footer && <DialogFooter>{footer}</DialogFooter>}
+        <DialogBody>{trNode(children)}</DialogBody>
+        {footer && <DialogFooter>{trNode(footer)}</DialogFooter>}
       </DialogContent>
     </Dialog>
   );

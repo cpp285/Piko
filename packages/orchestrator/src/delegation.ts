@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import path from "path";
+import { getTeamSpecialty } from "@piko/shared";
 import { CONFIG } from "./config.js";
 import { parseReviewerFeedback } from "./output-parser.js";
 import type { AgentManager } from "./agent-manager.js";
@@ -54,6 +55,8 @@ export class DelegationRouter {
   private lastDevAgentId: string | null = null;
   /** Last known preview fields from developer output (survives across rounds for leader context) */
   private lastDevPreview: string = "";
+  /** Concrete product/design handoffs, kept separate from runnable developer previews. */
+  private specialistHandoffs = new Map<string, { name: string; role: string; workspace: string; output: string }>();
   private agentManager: AgentManager;
   private promptEngine: PromptEngine;
   private emitEvent: (event: OrchestratorEvent) => void;
@@ -132,6 +135,7 @@ export class DelegationRouter {
       }
     }
     this.assignedTask.delete(agentId);
+    this.specialistHandoffs.delete(agentId);
     const pending = this.pendingResults.get(agentId);
     if (pending) {
       clearTimeout(pending.timer);
@@ -176,6 +180,7 @@ export class DelegationRouter {
     this.devFixAttempts.clear();
     this.lastDevAgentId = null;
     this.lastDevPreview = "";
+    this.specialistHandoffs.clear();
     for (const pending of this.pendingResults.values()) {
       clearTimeout(pending.timer);
     }
@@ -260,7 +265,7 @@ export class DelegationRouter {
 
       // Track last dev worker for reviewer → dev shortcut routing
       const targetRole = target.role.toLowerCase();
-      if (!targetRole.includes("review") && !targetRole.includes("lead")) {
+      if (!["review", "lead", "product", "design"].includes(getTeamSpecialty(target.role))) {
         this.lastDevAgentId = target.agentId;
       }
 
@@ -321,6 +326,12 @@ export class DelegationRouter {
       const fromSession = this.agentManager.get(agentId);
       const fromName = fromSession?.name ?? agentId;
       const statusWord = success ? "completed successfully" : "failed";
+      const specialty = getTeamSpecialty(fromSession?.role ?? "");
+      if (success && fromSession && (specialty === "product" || specialty === "design")) {
+        this.specialistHandoffs.set(agentId, { name: fromName, role: fromSession.role,
+          workspace: fromSession.worktreePath || this.teamProjectDir || fromSession.workspaceDir,
+          output: (fullOutput || summary).slice(0, 6000) });
+      }
 
       console.log(`[ResultForward] ${agentId} -> ${originAgentId}: ${summary.slice(0, 80)} (success=${success})`);
 
@@ -400,8 +411,7 @@ export class DelegationRouter {
       }
 
       // Capture preview fields from developer results so leader always has them
-      const fromRole = fromSession?.role?.toLowerCase() ?? "";
-      if (!fromRole.includes("review") && fullOutput) {
+      if (!["review", "lead", "product", "design"].includes(specialty) && fullOutput) {
         const lines: string[] = [];
         const em = fullOutput.match(/ENTRY_FILE:\s*(.+)/i);
         const cm = fullOutput.match(/PREVIEW_CMD:\s*(.+)/i);
@@ -531,7 +541,15 @@ export class DelegationRouter {
       lines.push(`- ${session.name} (${session.role}) [${status}]${brief}`);
     }
     if (lines.length === 0) return "";
-    return `===== TEAM AWARENESS =====\nYour teammates (for context — do NOT delegate or coordinate with them):\n${lines.join("\n")}`;
+    const handoffs = this.getSpecialistHandoffs(excludeAgentId);
+    return `===== TEAM AWARENESS =====\nYour teammates (for context — do NOT delegate or coordinate with them):\n${lines.join("\n")}\n\n${handoffs}`;
+  }
+
+  private getSpecialistHandoffs(excludeAgentId?: string): string {
+    const handoffs = [...this.specialistHandoffs.entries()]
+      .filter(([id]) => id !== excludeAgentId)
+      .map(([, work]) => `${work.name} (${work.role}) completed their handoff.\nSource workspace: ${work.workspace}\n${work.output}`);
+    return handoffs.length ? `===== PRODUCT AND DESIGN HANDOFFS =====\nUse these completed decisions and read referenced files from their source workspaces. Make your changes in your own workspace; do not modify a teammate's files.\n${handoffs.join("\n\n")}` : "";
   }
 
   /**
@@ -677,6 +695,8 @@ export class DelegationRouter {
       originalTask: originSession.originalTask ?? "",
       roundInfo,
       devPreview: this.lastDevPreview,
+      completedWork: this.getSpecialistHandoffs(),
+      teamRoster: teamContext,
     });
 
     console.log(`[ResultBatch] Flushing ${pending.results.length} result(s) to ${originAgentId} (round ${this.leaderRounds}, budget=${CONFIG.delegation.budgetRounds}, ceiling=${CONFIG.delegation.hardCeilingRounds})`);

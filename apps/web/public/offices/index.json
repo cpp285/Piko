@@ -1,64 +1,98 @@
 [
   {
     "id": "default",
-    "name": "Retro",
-    "file": "nostalgic.zip"
+    "theme": "Retro",
+    "name": "Postal Atelier",
+    "description": "Oak desks, vintage letterpress and a citrus-tree lounge.",
+    "file": "retro-atelier.zip",
+    "thumbnail": "retro-atelier.png"
   },
   {
     "id": "Modern",
-    "name": "Modern",
-    "file": "modern-cozy.zip"
-  }
-  ,
+    "theme": "Modern",
+    "name": "Garden Studio",
+    "description": "A sunlit studio with a central garden, shared desks and a reading nook.",
+    "file": "garden-studio.zip",
+    "thumbnail": "garden-studio.png"
+  },
   {
     "id": "Cute Whimsical",
-    "name": "Cute Whimsical",
-    "file": "cute-whimsical.zip"
+    "theme": "Cute Whimsical",
+    "name": "Cloud Playhouse",
+    "description": "Pastel craft desks, little kites and a cloud-filled reading wall.",
+    "file": "cloud-playhouse.zip",
+    "thumbnail": "cloud-playhouse.png"
   },
   {
     "id": "Mythological",
-    "name": "Mythological",
-    "file": "mythological.zip"
+    "theme": "Mythological",
+    "name": "Sun Scriptorium",
+    "description": "A celestial mosaic, sandstone desks and a sunlit fountain.",
+    "file": "sun-temple.zip",
+    "thumbnail": "sun-temple.png"
   },
-
   {
     "id": "Cyberpunk",
-    "name": "Cyberpunk",
-    "file": "cyberpunk.zip"
+    "theme": "Cyberpunk",
+    "name": "Neon Rooftop",
+    "description": "A bright hardware studio above the city, with a hydroponic wall.",
+    "file": "neon-rooftop.zip",
+    "thumbnail": "neon-rooftop.png"
   },
   {
     "id": "SciFi",
-    "name": "SciFi",
-    "file": "sifi.zip"
+    "theme": "SciFi",
+    "name": "Orbital Observatory",
+    "description": "Research consoles surround a star map beneath a planetary window.",
+    "file": "orbital-lab.zip",
+    "thumbnail": "orbital-lab.png"
   },
   {
     "id": "Post Apocalyptic",
-    "name": "Post Apocalyptic",
-    "file": "postApocalyptic.zip"
+    "theme": "Post Apocalyptic",
+    "name": "Renewal Outpost",
+    "description": "A reclaimed railway workshop with repaired tools and a vegetable garden.",
+    "file": "renewal-outpost.zip",
+    "thumbnail": "renewal-outpost.png"
   },
   {
     "id": "Historical",
-    "name": "Historical",
-    "file": "historical.zip"
+    "theme": "Historical",
+    "name": "Canal Archive",
+    "description": "A cartographers' guild with canal windows and brass instruments.",
+    "file": "canal-archive.zip",
+    "thumbnail": "canal-archive.png"
   },
   {
     "id": "Eastern Fantasy",
-    "name": "Eastern Fantasy",
-    "file": "easternFantasy.zip"
+    "theme": "Eastern Fantasy",
+    "name": "Bamboo Pavilion",
+    "description": "Jade floors, inkstone desks and a bridge over a quiet water garden.",
+    "file": "bamboo-pavilion.zip",
+    "thumbnail": "bamboo-pavilion.png"
   },
   {
     "id": "Western Fantasy",
-    "name": "Western Fantasy",
-    "file": "westernFantasy.zip"
+    "theme": "Western Fantasy",
+    "name": "Woodland Guild",
+    "description": "A woodland planning hall with a map rug and moss-green reading benches.",
+    "file": "woodland-guild.zip",
+    "thumbnail": "woodland-guild.png"
   },
   {
     "id": "Gothic",
-    "name": "Gothic",
-    "file": "gothic.zip"
+    "theme": "Gothic",
+    "name": "Rose Library",
+    "description": "Daylight through rose windows, pale stone and lilac writing chairs.",
+    "file": "rose-library.zip",
+    "thumbnail": "rose-library.png"
   },
   {
     "id": "DarkLegend",
-    "name": "DarkLegend",
-    "file": "darkLegend.zip"
+    "theme": "Dark Legend",
+    "name": "Moonstone Sanctum",
+    "description": "Moonlit archives around a silver reflecting pool.",
+    "file": "moonstone-sanctum.zip",
+    "thumbnail": "moonstone-sanctum.png"
   }
 ]

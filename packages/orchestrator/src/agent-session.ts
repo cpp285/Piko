@@ -1,12 +1,12 @@
 import { spawn, execSync, type ChildProcess } from "child_process";
 import path from "path";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { homedir } from "os";
+import { resolveHomeDataDir } from "@piko/shared/node";
 import { CONFIG } from "./config.js";
 import { resolvePreview } from "./preview-resolver.js";
-import { parseAgentOutput } from "./output-parser.js";
+import { parseAgentOutput, parseDelegationLine } from "./output-parser.js";
 import { nanoid } from "nanoid";
-import { removeWorktree, getIsolatedGitEnv } from "./worktree.js";
+import { removeWorktree, getIsolatedGitEnv, resolveGitWorkspaceRoot } from "./worktree.js";
 import type { AIBackend } from "./ai-backend.js";
 import type { AgentStatus, TaskResultPayload, OrchestratorEvent, LogActivityEvent } from "./types.js";
 import type { TemplateName } from "./prompt-templates.js";
@@ -40,9 +40,9 @@ function summarizeToolUse(name: string, input: Record<string, unknown> | undefin
 
 /* ── Persist session IDs + recovery context across restarts ───────── */
 
-// RecoveryContext is now defined in @bit-office/memory (packages/memory/src/types.ts).
+// RecoveryContext is now defined in @piko/memory (packages/memory/src/types.ts).
 // It includes structured SessionSummary instead of raw recentMessages.
-import type { RecoveryContext } from "@bit-office/memory";
+import type { RecoveryContext } from "@piko/memory";
 
 /** Disk format: value is either a legacy string (sessionId) or the new object */
 interface SessionEntry {
@@ -55,10 +55,9 @@ type SessionMap = Record<string, string | SessionEntry>;
 /**
  * Session file path is instance-scoped to prevent cross-instance contamination.
  * Set via setSessionDir() from the gateway using its instanceDir config.
- * Falls back to ~/.open-office[-dev] for backwards compatibility.
+ * Falls back to ~/.piko[-dev] for backwards compatibility.
  */
-let _sessionDir: string = path.join(homedir(),
-  process.env.NODE_ENV === "development" ? ".open-office-dev" : ".open-office");
+let _sessionDir: string = resolveHomeDataDir();
 
 export function setSessionDir(dir: string) {
   _sessionDir = dir;
@@ -168,6 +167,9 @@ interface QueuedTask {
 }
 
 export interface AgentSessionOpts {
+  /** Allow bounded conversation routing without making this person a tool-less team lead. */
+  allowDelegation?: boolean;
+  getPersona?: () => string;
   agentId: string;
   name: string;
   role: string;
@@ -221,8 +223,10 @@ export class AgentSession {
   private _renderPrompt: (templateName: TemplateName, vars: Record<string, string | undefined>) => string;
   private timedOut = false;
   private _isTeamLead: boolean;
+  private allowDelegation: boolean;
   private _memoryContext: string;
   private _model: string | undefined;
+  private getPersona?: () => string;
   /** Whether this leader has already been through execute phase at least once */
   private _hasExecuted = false;
   private _lastResult: string | null = null;
@@ -266,8 +270,12 @@ export class AgentSession {
   get currentWorkingDir(): string | null { return this.currentCwd; }
   /** Whether this agent has session history (used --resume before) */
   get hasSessionHistory(): boolean { return this.hasHistory; }
-  /** The configured workspace root directory */
-  get workspaceDir(): string { return this.workspace; }
+  /** Git operations must target the repository owning this task's worktree. */
+  get workspaceDir(): string {
+    return this.worktreePath && existsSync(this.worktreePath)
+      ? resolveGitWorkspaceRoot(this.worktreePath)
+      : this.workspace;
+  }
 
   /** PID of the running child process (null if not running) */
   get pid(): number | null { return this.process?.pid ?? null; }
@@ -283,12 +291,14 @@ export class AgentSession {
     this.name = opts.name;
     this.role = opts.role;
     this.personality = opts.personality ?? "";
+    this.getPersona = opts.getPersona;
     this.workspace = opts.workspace;
     this.sessionId = loadSessionMap()[opts.agentId] ?? null;
     this.hasHistory = opts.resumeHistory ?? !!this.sessionId;
     this.backend = opts.backend;
     this.sandboxMode = opts.sandboxMode ?? "full";
     this._isTeamLead = opts.isTeamLead ?? false;
+    this.allowDelegation = opts.allowDelegation ?? false;
     this.teamId = opts.teamId;
     this._memoryContext = opts.memoryContext ?? "";
     this._model = opts.model;
@@ -450,6 +460,9 @@ export class AgentSession {
         const canResume = !isReviewer && this.hasHistory && !!this.sessionId;
         fullPrompt = this._renderPrompt(canResume ? "worker-continue" : workerInitial, templateVars);
       }
+      // Files are re-read for each task, including queued and resumed turns.
+      // Append after the runtime template so older persona copies are superseded.
+      if (this.getPersona) fullPrompt += this.getPersona();
       const fullAccess = this.sandboxMode === "full";
       const verbose = !!process.env.DEBUG;
 
@@ -508,9 +521,6 @@ export class AgentSession {
         }, TASK_TIMEOUT_MS);
       }
 
-      // Delegation detection regex
-      const DELEGATION_RE = /^\s*(?:[-*>]\s*)?(?:\*\*)?@(\w+)(?:\*\*)?:\s*(.+)$/;
-
       // Filter out system/diagnostic noise that should not appear in the UI.
       // fromStreamJson: when true, skip verb/path filters (those are only for plain-text backends).
       const isSystemNoise = (line: string, fromStreamJson = false): boolean => {
@@ -550,12 +560,11 @@ export class AgentSession {
         for (const line of lines) {
           const trimmed = line.trim();
           console.log(`[Agent ${this.name}] ${trimmed.slice(0, 200)}`);
-          const match = this._isTeamLead ? trimmed.match(DELEGATION_RE) : null;
+          const match = (this._isTeamLead || this.allowDelegation) ? parseDelegationLine(trimmed) : null;
           if (match) {
             // Flush any previous delegation before starting a new one
             flushDelegation();
-            const [, targetName, delegatedPrompt] = match;
-            pendingDelegation = { targetName, lines: [delegatedPrompt] };
+            pendingDelegation = { targetName: match.targetName, lines: [match.prompt] };
           } else if (pendingDelegation) {
             // Continuation line of current delegation
             pendingDelegation.lines.push(trimmed);
@@ -564,8 +573,9 @@ export class AgentSession {
             visibleLines.push(trimmed);
           }
         }
-        // Flush at end of text block (covers single-delegation and last-delegation cases)
-        flushDelegation();
+        // JSON contains complete text blocks. Plain CLI output arrives line by line;
+        // keep its continuation lines until the process finishes or a new @name starts.
+        if (fromStreamJson) flushDelegation();
         if (visibleLines.length > 0) {
           this.onEvent({
             type: "log:append",
@@ -668,7 +678,7 @@ export class AgentSession {
                     }
                   }
                 }
-                // (conversationLog removed — recovery context now uses @bit-office/memory's
+                // (conversationLog removed — recovery context now uses @piko/memory's
                 //  structured SessionSummary instead of raw message fragments)
               } else if (msg.type === "result") {
                 // Result message: authoritative session total from msg.usage
@@ -768,6 +778,9 @@ export class AgentSession {
           }
         }
 
+        if (code === 0 && !this.cancelled) flushDelegation();
+        else pendingDelegation = null;
+
         const completedTaskId = this.currentTaskId ?? taskId;
         this.currentTaskId = null;
         const wasCancelled = this.cancelled;
@@ -788,7 +801,7 @@ export class AgentSession {
             const { summary, fullOutput, changedFiles, entryFile, projectDir, previewCmd, previewPort } = this.extractResult();
             this._lastFullOutput = fullOutput;
 
-            // Commit session to @bit-office/memory: extracts structured summary,
+            // Commit session to @piko/memory: extracts structured summary,
             // saves session history, and extracts reusable agent facts.
             // This replaces the old saveRecoveryContext + raw recentMessages approach.
             commitSession({
@@ -888,7 +901,7 @@ export class AgentSession {
             // work before hitting the limit. Preserve the worktree for retry.
             if (this.worktreePath && this.worktreeBranch && !isTransientApiError) {
               try {
-                removeWorktree(this.worktreePath, this.worktreeBranch, this.workspace);
+                removeWorktree(this.worktreePath, this.worktreeBranch, this.workspaceDir);
                 console.log(`[Agent ${this.name}] Cleaned up worktree branch on failure: ${this.worktreeBranch}`);
               } catch { /* ignore */ }
               this.worktreePath = null;
@@ -1041,6 +1054,8 @@ export class AgentSession {
   private _userCancelled = false;
 
   cancelTask() {
+    if (this.cancelled) return;
+    const queuedTasks = this.taskQueue;
     this.taskQueue = [];
     this._userCancelled = true;
 
@@ -1048,6 +1063,13 @@ export class AgentSession {
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
 
     const cancelledTaskId = this.currentTaskId ?? "";
+    for (const task of queuedTasks) {
+      this.onEvent({ type: "task:failed", agentId: this.agentId, taskId: task.taskId, error: "Task cancelled by user" });
+    }
+    if (!cancelledTaskId) {
+      this.setStatus("idle");
+      return;
+    }
 
     // Kill the running process if there is one
     if (this.process && this.process.pid) {
@@ -1073,6 +1095,7 @@ export class AgentSession {
       taskId: cancelledTaskId,
       error: "Task cancelled by user",
     });
+    this.currentTaskId = null;
     this.idleTimer = setTimeout(() => { this.idleTimer = null; this.setStatus("idle"); }, CONFIG.timing.idleErrorDelayMs);
   }
 

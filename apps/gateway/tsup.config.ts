@@ -3,9 +3,10 @@ import { builtinModules } from "node:module";
 
 const bundleAll = !!process.env.BUNDLE_ALL;
 
-// Inject createRequire so CJS deps (ws, ably) can require() Node builtins in ESM bundle
+// Standalone bundles include dependencies which still use CommonJS globals, including
+// the Feishu SDK's version lookup. No surrounding package.json/node_modules is available.
 const requireShim = bundleAll
-  ? 'import { createRequire as __cr } from "node:module"; const require = __cr(import.meta.url);'
+  ? 'import { createRequire as __cr } from "node:module"; import { fileURLToPath as __filePath } from "node:url"; import { dirname as __dirPath } from "node:path"; const require = __cr(import.meta.url); const __filename = __filePath(import.meta.url); const __dirname = __dirPath(__filename);'
   : "";
 
 export default defineConfig({
@@ -16,7 +17,7 @@ export default defineConfig({
   clean: true,
   splitting: false,
   sourcemap: true,
-  noExternal: bundleAll ? [/(.*)/] : ["@office/shared"],
+  noExternal: bundleAll ? [/(.*)/] : ["@piko/shared"],
   external: bundleAll ? builtinModules.flatMap((m) => [m, `node:${m}`]) : [],
   banner: {
     js: `#!/usr/bin/env node\n${requireShim}`,

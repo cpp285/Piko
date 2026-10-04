@@ -1,5 +1,5 @@
 {
-  "name": "@bit-office/orchestrator",
+  "name": "@piko/orchestrator",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bit-office/memory": "workspace:*",
+    "@piko/memory": "workspace:*",
+    "@piko/shared": "workspace:*",
     "nanoid": "^5.0.0"
   },
   "devDependencies": {

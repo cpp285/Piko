@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { OfficeState } from "../engine/officeState";
@@ -17,6 +19,8 @@ import { PixelSceneAdapter } from "./PixelSceneAdapter";
 
 export interface PixelOfficeSceneProps extends SceneComponentProps {
   editMode: boolean;
+  followSelected?: boolean;
+  onStopFollowing?: () => void;
   editorRef: React.MutableRefObject<EditorState>;
   onTileClick?: (col: number, row: number) => void;
   onTileRightClick?: (col: number, row: number) => void;
@@ -36,6 +40,8 @@ export default function PixelOfficeScene({
   onAdapterReady,
   onAgentClick,
   editMode,
+  followSelected = false,
+  onStopFollowing,
   editorRef,
   onTileClick,
   onTileRightClick,
@@ -50,6 +56,7 @@ export default function PixelOfficeScene({
   zoomRef,
   panRef,
 }: PixelOfficeSceneProps) {
+  useLocale();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [assetsLoaded, setAssetsLoaded] = useState(false);
 
@@ -61,6 +68,11 @@ export default function PixelOfficeScene({
   const editModeRef = useRef(editMode);
   editModeRef.current = editMode;
 
+  const followRef = useRef(followSelected);
+  followRef.current = followSelected;
+  const stopFollowingRef = useRef(onStopFollowing);
+  stopFollowingRef.current = onStopFollowing;
+
   // Camera state
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
@@ -68,6 +80,8 @@ export default function PixelOfficeScene({
   const editorRenderRef = useRef<EditorRenderState | null>(null);
   /** Wake the game loop from sleep on user interaction */
   const wakeRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => { wakeRef.current?.(); }, [followSelected]);
 
   /** Calculate zoom so the map fills the viewport (contain fit) */
   const calcFitZoom = useCallback((viewW: number, viewH: number) => {
@@ -140,9 +154,25 @@ export default function PixelOfficeScene({
 
     // Start game loop
     const dpr = window.devicePixelRatio || 1;
+    let followingNeedsTick = false;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const { stop, wake } = startGameLoop(canvas, {
       update: (dt) => {
         officeState.update(dt);
+        followingNeedsTick = false;
+        const selected = officeState.selectedCharId === null ? undefined : officeState.characters.get(officeState.selectedCharId);
+        if (followRef.current && selected && !editModeRef.current && !isPanningRef.current) {
+          const zoom = zoomRef.current;
+          const targetX = (officeState.layout.cols * TILE_SIZE / 2 - selected.x) * zoom;
+          const targetY = (officeState.layout.rows * TILE_SIZE / 2 - selected.y) * zoom;
+          const blend = reducedMotion ? 1 : 1 - Math.exp(-8 * dt);
+          const pan = panRef.current;
+          followingNeedsTick = Math.abs(targetX - pan.x) > .3 || Math.abs(targetY - pan.y) > .3;
+          panRef.current = {
+            x: Math.abs(targetX - pan.x) < .3 ? targetX : pan.x + (targetX - pan.x) * blend,
+            y: Math.abs(targetY - pan.y) < .3 ? targetY : pan.y + (targetY - pan.y) * blend,
+          };
+        }
       },
       isDirty: (() => {
         let prevZoom = 0;
@@ -176,7 +206,7 @@ export default function PixelOfficeScene({
           return false;
         };
       })(),
-      needsTick: () => officeState.needsTick,
+      needsTick: () => officeState.needsTick || followingNeedsTick,
       render: (ctx) => {
         const cw = canvas.width / dpr;
         const ch = canvas.height / dpr;
@@ -352,6 +382,7 @@ export default function PixelOfficeScene({
 
     if (!isPanningRef.current) return;
     if (!PAN_ENABLED) return;
+    if (followRef.current) { followRef.current = false; stopFollowingRef.current?.(); }
     if (editorRef.current.dragUid) return; // don't pan while dragging furniture
 
     const dx = e.clientX - panStartRef.current.x;
@@ -524,8 +555,7 @@ export default function PixelOfficeScene({
           fontFamily: "system-ui, sans-serif",
           zIndex: 10,
         }}>
-          Loading office...
-        </div>
+          {tr("Loading office...")}</div>
       )}
       <canvas
         ref={canvasRef}

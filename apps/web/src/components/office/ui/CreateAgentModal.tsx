@@ -1,106 +1,32 @@
 "use client";
-
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { nanoid } from "nanoid";
-import type { AgentDefinition } from "@office/shared";
-import { ROLE_CATALOG, ROLE_DESC_MAP, ROLE_PRESETS, PERSONALITY_PRESETS } from "./office-constants";
-import { TERM_PANEL, TERM_SURFACE, TERM_BORDER, TERM_BORDER_DIM, TERM_BG, TERM_TEXT, TERM_GREEN, TERM_DIM, TERM_SEM_BLUE } from "./termTheme";
+import ReactMarkdown from "react-markdown";
+import { RefreshCw, FilePenLine, Check } from "lucide-react";
+import { CHARACTER_APPEARANCES, createDefaultPersona, PERSONA_MAX_LENGTH, normalizeSkillName, type AgentDefinition, type PersonaDocuments } from "@piko/shared";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+import { useOfficeStore } from "@/store/office-store";
+import { saveAgentDefinition } from "@/lib/agent-definition-client";
+import { ROLE_CATALOG, ROLE_DESC_MAP, PERSONALITY_PRESETS } from "./office-constants";
+import { TERM_BORDER, TERM_DIM } from "./termTheme";
 import SpriteAvatar from "./SpriteAvatar";
-import { isRealEnter } from "./office-utils";
 import TermModal from "./primitives/TermModal";
 import TermButton from "./primitives/TermButton";
 import TermInput from "./primitives/TermInput";
-import { useOfficeStore } from "@/store/office-store";
-
-const TERM_YELLOW = "#e5c07b";
-
-function RoleSearchSelect({ value, onSelect }: { value: string; onSelect: (role: string) => void }) {
-  const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const query = search.toLowerCase();
-  const filtered = query
-    ? ROLE_CATALOG.map((cat) => ({
-        ...cat,
-        agents: cat.agents.filter((a) =>
-          a.name.toLowerCase().includes(query) || a.desc.toLowerCase().includes(query) || cat.label.toLowerCase().includes(query)
-        ),
-      })).filter((cat) => cat.agents.length > 0)
-    : ROLE_CATALOG;
-
-  return (
-    <div ref={ref} style={{ position: "relative" }}>
-      <TermInput
-        value={open ? search : value}
-        onChange={(e) => { setSearch(e.target.value); if (!open) setOpen(true); }}
-        onFocus={() => { setOpen(true); setSearch(""); }}
-        placeholder="Search roles or type custom..."
-      />
-      {open && (
-        <div data-scrollbar style={{
-          position: "absolute", top: "100%", left: 0, right: 0, zIndex: 200,
-          maxHeight: 250, overflowY: "auto", backgroundColor: TERM_BG,
-          border: `1px solid ${TERM_BORDER}`, borderTop: "none",
-        }}>
-          {filtered.map((cat) => (
-            <div key={cat.category}>
-              <div style={{
-                padding: "4px 10px", fontSize: 10, color: TERM_DIM,
-                fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.05em",
-                backgroundColor: TERM_BG, position: "sticky", top: 0,
-              }}>
-                {cat.label}
-              </div>
-              {cat.agents.map((a) => (
-                <div
-                  key={a.name}
-                  onClick={() => { onSelect(a.name); setOpen(false); setSearch(""); }}
-                  style={{
-                    padding: "5px 10px", fontSize: 13, fontFamily: "var(--font-mono)",
-                    color: a.name === value ? TERM_GREEN : TERM_TEXT,
-                    cursor: "pointer", backgroundColor: a.name === value ? `${TERM_GREEN}18` : "transparent",
-                  }}
-                  onMouseEnter={(e) => { if (a.name !== value) e.currentTarget.style.backgroundColor = TERM_SURFACE; }}
-                  onMouseLeave={(e) => { if (a.name !== value) e.currentTarget.style.backgroundColor = "transparent"; }}
-                >
-                  {a.name}
-                </div>
-              ))}
-            </div>
-          ))}
-          {filtered.length === 0 && search.trim() && (
-            <div
-              onClick={() => { onSelect(search.trim()); setOpen(false); setSearch(""); }}
-              style={{ padding: "8px 10px", fontSize: 13, fontFamily: "var(--font-mono)", color: TERM_DIM, cursor: "pointer" }}
-            >
-              Use custom: &quot;{search.trim()}&quot;
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
+import AgentIdentityModal from "./AgentIdentityModal";
+import styles from "./CreateAgentModal.module.css";
+const TERM_YELLOW = "#987044";
 /** Inline modal for creating a new skill file */
 function CreateSkillInline({ onSave, onCancel }: {
   onSave: (name: string, content: string) => void;
   onCancel: () => void;
 }) {
+  useLocale();
   const [skillName, setSkillName] = useState("");
   const [skillContent, setSkillContent] = useState("");
 
   const handleSave = () => {
-    const name = skillName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-").replace(/^-|-$/g, "");
+    const name = normalizeSkillName(skillName);
     if (!name || !skillContent.trim()) return;
     onSave(name, skillContent);
   };
@@ -113,321 +39,109 @@ function CreateSkillInline({ onSave, onCancel }: {
       marginTop: 6,
     }}>
       <div style={{ fontSize: 11, color: TERM_YELLOW, marginBottom: 6, fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>
-        NEW SKILL FILE
-      </div>
+        {tr("NEW SKILL FILE")}</div>
       <TermInput
         value={skillName}
         onChange={(e) => setSkillName(e.target.value)}
-        placeholder="Skill name (e.g. tdd, react-patterns)"
+        placeholder={tr("Skill name (e.g. tdd, react-patterns)")}
         style={{ marginBottom: 6 }}
       />
       <textarea
         className="ti ti-textarea"
         value={skillContent}
         onChange={(e) => setSkillContent(e.target.value)}
-        placeholder={"# Skill Title\n\nPaste or type skill content in Markdown..."}
+        placeholder={tr("# Skill Title\n\nPaste or type skill content in Markdown...")}
         rows={5}
         style={{ resize: "vertical", marginBottom: 6, width: "100%", boxSizing: "border-box" }}
       />
       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
         <TermButton variant="dim" onClick={onCancel} style={{ padding: "4px 10px", fontSize: 12 }}>
-          Cancel
-        </TermButton>
+          {tr("Cancel")}</TermButton>
         <TermButton
           variant="primary"
           onClick={handleSave}
           disabled={!skillName.trim() || !skillContent.trim()}
           style={{ padding: "4px 10px", fontSize: 12 }}
         >
-          Save Skill
-        </TermButton>
+          {tr("Save Skill")}</TermButton>
       </div>
     </div>
   );
 }
 
+
 function CreateAgentModal({ onSave, onClose, assetsReady, editAgent, sendCommand }: {
-  onSave: (agent: AgentDefinition) => void;
-  onClose: () => void;
-  assetsReady?: boolean;
-  editAgent?: AgentDefinition | null;
-  sendCommand?: (cmd: any) => void;
+  onSave: (agent: AgentDefinition) => void; onClose: () => void; assetsReady?: boolean;
+  editAgent?: AgentDefinition | null; sendCommand?: (cmd: any) => void;
 }) {
-  const [palette, setPalette] = useState(editAgent?.palette ?? Math.floor(Math.random() * 6));
-
-  const [rolePresetIndex, setRolePresetIndex] = useState<number>(() => {
-    if (!editAgent?.role) return 0;
-    const idx = ROLE_PRESETS.indexOf(editAgent.role);
-    return idx >= 0 ? idx : -1;
-  });
-  const [customRole, setCustomRole] = useState(() => {
-    if (!editAgent?.role) return "";
-    const idx = ROLE_PRESETS.indexOf(editAgent.role);
-    return idx >= 0 ? "" : editAgent.role;
-  });
-
-  // Skill files state
-  const availableSkills = useOfficeStore((s) => s.availableSkills);
-  const [selectedSkillFiles, setSelectedSkillFiles] = useState<Set<string>>(() => {
-    return new Set(editAgent?.skillFiles ?? []);
-  });
+  const language = useLocale(); const t = (zh: string, en: string) => language === "zh" ? zh : en;
+  const connected = useOfficeStore(s => s.connected);
+  const availableSkills = useOfficeStore(s => s.availableSkills);
+  const [id] = useState(() => editAgent?.id || `person-${nanoid(12)}`);
+  const [name, setName] = useState(editAgent?.name || "");
+  const [role, setRole] = useState(editAgent ? tr(editAgent.role) : "");
+  const [responsibilities, setResponsibilities] = useState(editAgent?.skills || "");
+  const [palette, setPalette] = useState(() => editAgent?.palette ?? 8);
+  const [personality, setPersonality] = useState(editAgent?.personality || PERSONALITY_PRESETS[0].value);
+  const [selectedSkillFiles, setSelectedSkillFiles] = useState(new Set(editAgent?.skillFiles || []));
   const [showCreateSkill, setShowCreateSkill] = useState(false);
-
-  // Request skill list on mount
-  useEffect(() => {
-    sendCommand?.({ type: "LIST_SKILLS" });
-  }, [sendCommand]);
-
-  const currentRole = rolePresetIndex >= 0 ? ROLE_PRESETS[rolePresetIndex] : customRole.trim();
-
-  const handleRoleChange = (idx: number) => {
-    setRolePresetIndex(idx);
+  const [identityOpen, setIdentityOpen] = useState(false);
+  const [draftDocs, setDraftDocs] = useState<PersonaDocuments | null>(null);
+  const [editing, setEditing] = useState({ identity: false, soul: false });
+  const [resetDocs, setResetDocs] = useState(false);
+  const [dirty, setDirty] = useState(false); const [closing, setClosing] = useState(false);
+  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const choices = useMemo(() => [{ name: "文章编辑", desc: "选题、写稿、事实核查与编辑润色" }, { name: "营销运营", desc: "内容规划、渠道运营与效果复盘" }, { name: "研究助理", desc: "资料收集、来源核查与研究摘要" }, ...ROLE_CATALOG.flatMap(c => c.agents)], []);
+  // Use the canonical preset for unchanged existing roles; free text is always accepted.
+  const canonicalRole = choices.find(item => tr(item.name) === role.trim() || item.name === role.trim())?.name || role.trim();
+  const generated = useMemo(() => createDefaultPersona({ name: name.trim() || role.trim().slice(0,80), role: canonicalRole, skills: responsibilities, personality }), [name, role, canonicalRole, responsibilities, personality]);
+  const docs = draftDocs || generated;
+  const touch = () => { setDirty(true); setError(""); };
+  useEffect(() => { sendCommand?.({ type: "LIST_SKILLS" }); }, [sendCommand]);
+  const close = () => { if (busy) return; if (dirty) setClosing(true); else onClose(); };
+  const regenerate = () => { if (draftDocs) setResetDocs(true); else { setDraftDocs(null); setEditing({ identity: false, soul: false }); } };
+  const save = async () => {
+    if (!canonicalRole) { setError(t("请填写岗位名称，例如文章编辑。", "Enter a role, such as article editor.")); return; }
+    if (!connected) { setError(t("连接已断开，恢复后可以保存。", "Reconnect before saving.")); return; }
+    const def: AgentDefinition = { id, name: name.trim() || role.trim().slice(0,80), role: canonicalRole, skills: responsibilities.trim(), personality, palette, isBuiltin: editAgent?.isBuiltin || false, teamRole: editAgent?.teamRole || "dev", skillFiles: [...selectedSkillFiles] };
+    setBusy(true); setError("");
+    try { await saveAgentDefinition(def, editAgent ? undefined : docs); onSave(def); }
+    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
-
-  const toggleSkillFile = (name: string) => {
-    setSelectedSkillFiles((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  };
-
-  const handleCreateSkill = (skillName: string, content: string) => {
-    sendCommand?.({ type: "SAVE_SKILL", name: skillName, content });
-    setSelectedSkillFiles((prev) => new Set(prev).add(skillName));
-    setShowCreateSkill(false);
-  };
-
-  const [personalityMode, setPersonalityMode] = useState<number>(() => {
-    if (!editAgent) return 0;
-    const idx = PERSONALITY_PRESETS.findIndex((p) => p.value === editAgent.personality);
-    return idx >= 0 ? idx : 4;
-  });
-  const [customPersonality, setCustomPersonality] = useState(editAgent?.personality ?? "");
-
-  const currentPersonality = personalityMode < 3
-    ? PERSONALITY_PRESETS[personalityMode].value
-    : customPersonality;
-
-  // Name is assigned at hire time — use role as definition display name
-  const defName = editAgent?.name ?? currentRole;
-
-  const handleSave = () => {
-    if (!currentRole.trim()) return;
-    const id = editAgent
-      ? editAgent.id
-      : (defName.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-").replace(/^-|-$/g, "") || "agent") + `-${nanoid(4)}`;
-    const skillFilesArr = Array.from(selectedSkillFiles);
-    onSave({
-      id,
-      name: defName.trim(),
-      role: currentRole,
-      skills: ROLE_DESC_MAP.get(currentRole) ?? "",
-      personality: currentPersonality,
-      palette,
-      isBuiltin: editAgent?.isBuiltin ?? false,
-      teamRole: editAgent?.teamRole ?? "dev",
-      ...(skillFilesArr.length > 0 ? { skillFiles: skillFilesArr } : {}),
-    });
-  };
-
-  return (
-    <TermModal
-      open={true}
-      onClose={onClose}
-      maxWidth={440}
-      zIndex={110}
-      title={editAgent ? "Edit Agent" : "Create Agent"}
-      className="max-h-[min(712px,85vh)]"
-      footer={
-        <>
-          <TermButton variant="primary" onClick={handleSave} disabled={!currentRole.trim()} style={{ flex: 1, fontWeight: 700 }}>
-            {editAgent ? "Save" : "Create"}
-          </TermButton>
-          <TermButton variant="dim" onClick={onClose}>Cancel</TermButton>
-        </>
-      }
-    >
-      {/* Avatar */}
-      <div className="mb-3">
-        <div className="text-term text-muted-foreground font-mono tracking-wide mb-1">AVATAR</div>
-        <div className="flex gap-1">
-          {[0, 1, 2, 3, 4, 5].map((p) => (
-            <button
-              key={p}
-              onClick={() => setPalette(p)}
-              style={{
-                padding: 3, border: palette === p ? `2px solid ${TERM_GREEN}` : `2px solid ${TERM_BORDER}`,
-                backgroundColor: palette === p ? `${TERM_GREEN}18` : "transparent",
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-              }}
-            >
-              <SpriteAvatar palette={p} zoom={2} ready={assetsReady} />
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Role */}
-      <div style={{ marginBottom: 8, position: "relative" }}>
-        <div className="text-term text-muted-foreground font-mono tracking-wide mb-1">ROLE</div>
-        <RoleSearchSelect
-          value={currentRole}
-          onSelect={(roleName) => {
-            const idx = ROLE_PRESETS.indexOf(roleName);
-            if (idx >= 0) {
-              handleRoleChange(idx);
-            } else {
-              setRolePresetIndex(-1);
-              setCustomRole(roleName);
-            }
-          }}
-        />
-        {ROLE_DESC_MAP.get(currentRole) && (
-          <div style={{ fontSize: 11, color: TERM_DIM, marginTop: 4, fontFamily: "var(--font-mono)", lineHeight: 1.4 }}>
-            {ROLE_DESC_MAP.get(currentRole)}
-          </div>
-        )}
-      </div>
-
-      {/* Skill Files */}
-      <div style={{ marginBottom: 8 }}>
-        <div style={{
-          fontSize: 12, color: TERM_DIM, marginBottom: 4, fontFamily: "var(--font-mono)", letterSpacing: "0.05em",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-        }}>
-          <span>SKILL FILES</span>
-          <span style={{ fontSize: 10, color: TERM_DIM, fontWeight: 400 }}>
-            .md instructions auto-loaded by AI
-          </span>
-        </div>
-        {availableSkills.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 6 }}>
-            {availableSkills.map((skill) => {
-              const active = selectedSkillFiles.has(skill.name);
-              return (
-                <label
-                  key={skill.name}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 6, padding: "4px 8px",
-                    cursor: "pointer", fontSize: 13, fontFamily: "var(--font-mono)",
-                    color: active ? TERM_TEXT : TERM_DIM,
-                    backgroundColor: active ? `${TERM_GREEN}0c` : "transparent",
-                    border: `1px solid ${active ? TERM_GREEN + "30" : "transparent"}`,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={() => toggleSkillFile(skill.name)}
-                    style={{ accentColor: TERM_GREEN, cursor: "pointer" }}
-                  />
-                  <span style={{ flex: 1 }}>{skill.title}</span>
-                  {skill.isFolder && (
-                    <span style={{ fontSize: 10, color: TERM_DIM, opacity: 0.6 }} title="Folder with multiple files">
-                      [dir]
-                    </span>
-                  )}
-                </label>
-              );
-            })}
-          </div>
-        )}
-        {/* Selected skills not in available list (stale references) */}
-        {(() => {
-          const availableNames = new Set(availableSkills.map((s) => s.name));
-          const stale = Array.from(selectedSkillFiles).filter((n) => !availableNames.has(n));
-          if (stale.length === 0) return null;
-          return (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 6 }}>
-              {stale.map((name) => (
-                <span
-                  key={name}
-                  style={{
-                    padding: "2px 8px", fontSize: 12, fontFamily: "var(--font-mono)",
-                    border: `1px solid ${TERM_BORDER}`, color: TERM_DIM, opacity: 0.5,
-                    display: "flex", alignItems: "center", gap: 4,
-                  }}
-                >
-                  {name}
-                  <span
-                    onClick={() => toggleSkillFile(name)}
-                    style={{ cursor: "pointer", fontSize: 14, lineHeight: 1 }}
-                  >&times;</span>
-                </span>
-              ))}
-            </div>
-          );
-        })()}
-        {availableSkills.length === 0 && !showCreateSkill && (
-          <div style={{ fontSize: 12, color: TERM_DIM, fontFamily: "var(--font-mono)", marginBottom: 4, opacity: 0.7 }}>
-            No skill files yet.
-          </div>
-        )}
-        {!showCreateSkill ? (
-          <TermButton
-            variant="dim"
-            onClick={() => setShowCreateSkill(true)}
-            style={{ padding: "4px 10px", fontSize: 12, width: "100%" }}
-          >
-            + Create Skill File
-          </TermButton>
-        ) : (
-          <CreateSkillInline
-            onSave={handleCreateSkill}
-            onCancel={() => setShowCreateSkill(false)}
-          />
-        )}
-      </div>
-
-      {/* Personality — 2-column grid */}
-      <div style={{ marginBottom: 10 }}>
-        <div className="text-term text-muted-foreground font-mono tracking-wide mb-1">PERSONALITY</div>
-        <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-          {PERSONALITY_PRESETS.map((p, i) => (
-            <label
-              key={i}
-              className="flex items-center gap-1.5 px-1.5 py-1 cursor-pointer font-mono text-[13px]"
-              style={{ color: personalityMode === i ? TERM_TEXT : TERM_DIM }}
-            >
-              <input
-                type="radio"
-                name="personality"
-                checked={personalityMode === i}
-                onChange={() => setPersonalityMode(i)}
-                style={{ accentColor: TERM_GREEN, cursor: "pointer" }}
-              />
-              {p.label}
-            </label>
-          ))}
-          <label
-            className="flex items-center gap-1.5 px-1.5 py-1 cursor-pointer font-mono text-[13px]"
-            style={{ color: personalityMode === 3 ? TERM_TEXT : TERM_DIM }}
-          >
-            <input
-              type="radio"
-              name="personality"
-              checked={personalityMode === 3}
-              onChange={() => setPersonalityMode(3)}
-              style={{ accentColor: TERM_GREEN, cursor: "pointer" }}
-            />
-            Custom
-          </label>
-        </div>
-        {personalityMode === 3 && (
-          <textarea
-            className="ti ti-textarea mt-1.5"
-            value={customPersonality}
-            onChange={(e) => setCustomPersonality(e.target.value)}
-            placeholder="Describe the personality..."
-            rows={2}
-            style={{ resize: "vertical" }}
-          />
-        )}
-      </div>
-    </TermModal>
-  );
+  const toggleSkill = (skill: string) => { touch(); setSelectedSkillFiles(prev => { const next = new Set(prev); if(next.has(skill)) next.delete(skill); else next.add(skill); return next; }); };
+  return <TermModal open onClose={close} maxWidth={840} zIndex={140} title={t(editAgent ? "编辑人物" : "新建人物", editAgent ? "Edit person" : "New person")} className={styles.modal} footer={<div className={styles.footer}>
+    <span role="status">{closing ? t("还有未保存的内容", "Unsaved changes") : t("创建后也能随时修改", "You can edit this later")}</span>
+    <div>{closing ? <><button onClick={() => setClosing(false)}>{t("继续编辑", "Keep editing")}</button><button onClick={onClose}>{t("放弃并关闭", "Discard and close")}</button></> : <><button onClick={close} disabled={busy}>{t("取消", "Cancel")}</button><button className={styles.primary} onClick={() => void save()} disabled={busy || !canonicalRole || !connected}>{busy ? t("保存中…", "Saving…") : t(editAgent ? "保存人物" : "创建人物", editAgent ? "Save person" : "Create person")}</button></>}</div>
+  </div>}>
+    <p className={styles.intro}>{t("写下岗位和职责，为自己添加一位新搭档。", "Describe a role and add a new teammate.")}</p>
+    {error && <p className={styles.error} role="alert">{error}</p>}
+    {!connected && <p className={styles.error}>{t("连接已断开，填写的内容会保留。", "Disconnected. Your draft is kept.")}</p>}
+    <div className={styles.setup}>
+      <section className={styles.appearance} aria-label={t("成员形象", "Appearance")}>
+        <div className={styles.portrait}><SpriteAvatar palette={palette} zoom={4} ready={assetsReady} /></div>
+        <strong>{name.trim() || role.trim() || t("你的新搭档", "Your new teammate")}</strong>
+        <p>{CHARACTER_APPEARANCES[palette]?.name || t("成员形象", "Appearance")}</p>
+        <small>{t("14 个形象，点击即可选用", "14 ready-to-use appearances")}</small>
+        {[{label:t("新增形象", "New appearances"),start:8,end:14},{label:t("原有形象", "Original appearances"),start:0,end:8}].map(group=><div key={group.start} className={styles.appearanceGroup}><span>{group.label}</span><div className={styles.avatarChoices} data-new={group.start===8} aria-label={group.label}>{CHARACTER_APPEARANCES.slice(group.start,group.end).map((look,index)=>{const p=group.start+index;return <button key={look.id} title={look.name} aria-label={`${t("形象", "Appearance")}：${look.name}`} aria-pressed={palette===p} onClick={()=>{setPalette(p);touch();}}><SpriteAvatar palette={p} zoom={1.6} ready={assetsReady}/></button>;})}</div></div>)}
+      </section>
+      <section className={styles.brief}>
+        <label className={styles.field}>{t("称呼（可选）", "Name (optional)")}<input value={name} maxLength={80} onChange={e=>{setName(e.target.value);touch();}} placeholder={t("例如：小林；留空则使用岗位名称", "Leave blank to use the role name")} /></label>
+        <label className={styles.field}>{t("岗位名称", "Role")}<input value={role} maxLength={120} onChange={e=>{setRole(e.target.value);touch();}} placeholder={t("直接填写，例如：文章编辑", "Type any role, e.g. article editor")} /></label>
+        <label className={styles.presetLabel}>{t("或从常用岗位开始", "Or start from a preset")}<select aria-label={t("常用岗位", "Role presets")} value="" onChange={e=>{const choice=choices.find(c=>c.name===e.target.value);if(!choice)return;setRole(tr(choice.name));if(!responsibilities.trim() || [...ROLE_DESC_MAP.values(), ...choices.map(c=>tr(c.desc))].includes(responsibilities))setResponsibilities(tr(choice.desc));touch();}}><option value="">{t("选择常用岗位…", "Choose a role…")}</option>{choices.map(c=><option value={c.name} key={c.name}>{tr(c.name)}</option>)}</select></label>
+        <label className={styles.field}>{t("主要职责", "Responsibilities")}<textarea rows={4} value={responsibilities} maxLength={4000} onChange={e=>{setResponsibilities(e.target.value);touch();}} placeholder={t("例如：帮我编辑公众号文章，保留作者语气，核对数据来源，给出标题和修改理由。", "Describe what this person should do and deliver.")} /></label>
+        <label className={styles.field}>{t("沟通习惯", "Communication style")}<select value={PERSONALITY_PRESETS.some(p=>p.value===personality)?personality:"custom"} onChange={e=>{setPersonality(e.target.value==='custom'?'':e.target.value);touch();}}>{PERSONALITY_PRESETS.map(p=><option key={p.value} value={p.value}>{tr(p.label)}</option>)}<option value="custom">{t("自己填写", "Custom")}</option></select>{!PERSONALITY_PRESETS.some(p=>p.value===personality)&&<textarea rows={2} value={personality} maxLength={8000} onChange={e=>{setPersonality(e.target.value);touch();}} placeholder={t("例如：先给修改后的稿件，再说明关键改动。", "Describe how this person should communicate.")} />}</label>
+      </section>
+    </div>
+    {editAgent ? <section className={styles.documents}><h3>{t("身份与做事方式", "Identity and working style")}</h3><p>{t("已有文档会保留。调整岗位后，可以在这里同步修改。", "Existing documents are preserved. Update them here when changing roles.")}</p><button onClick={()=>setIdentityOpen(true)}><FilePenLine size={16}/>{t("查看与编辑 IDENTITY / SOUL", "View and edit IDENTITY / SOUL")}</button></section> : <section className={styles.documents}>
+      <div className={styles.documentHeading}><div><h3>{t("身份与做事方式", "Identity and working style")}</h3><p>{t("根据岗位与职责即时生成，内容可以直接修改。", "Generated from this role and its responsibilities. Edit either document.")}</p></div>{draftDocs&&<button onClick={regenerate}><RefreshCw size={14}/>{t("按当前职责重新生成", "Regenerate from brief")}</button>}</div>
+      {!canonicalRole ? <div className={styles.empty}>{t("填写岗位名称后，这里会出现两份文档初稿。", "Enter a role to preview both documents.")}</div> : <>
+        {draftDocs&&<p className={styles.hint}>{t("当前保留你手动修改的文档；调整岗位或职责后，可选择重新生成。", "Your document edits are kept. Regenerate if you want to use the updated brief.")}</p>}
+        {resetDocs&&<div className={styles.reset}><span>{t("重新生成会替换这里手动修改的初稿。", "Regenerating replaces your document edits.")}</span><button onClick={()=>setResetDocs(false)}>{t("保留修改", "Keep edits")}</button><button onClick={()=>{setDraftDocs(null);setEditing({identity:false,soul:false});setResetDocs(false);touch();}}>{t("替换为新初稿", "Replace draft")}</button></div>}
+        {(['identity','soul'] as const).map(field=><section key={field} className={styles.documentCard}><header><div><strong>{field==='identity'?t("我是谁", "Who I am"):t("我怎么做事", "How I work")}</strong><code>agent/{field.toUpperCase()}.md</code></div><button onClick={()=>setEditing(e=>({...e,[field]:!e[field]}))}>{editing[field]?<Check size={14}/>:<FilePenLine size={14}/>} {editing[field]?t("预览", "Preview"):t("查看与编辑", "View and edit")}</button></header>{editing[field]?<textarea aria-label={`agent/${field.toUpperCase()}.md`} rows={12} maxLength={PERSONA_MAX_LENGTH} value={docs[field]} onChange={e=>{setDraftDocs({...docs,[field]:e.target.value});touch();}}/>:<div className={styles.markdown}><ReactMarkdown>{docs[field]}</ReactMarkdown></div>}</section>)}
+      </>}
+    </section>}
+    <details className={styles.skills}><summary>{t("技能文件（可选）", "Skill files (optional)")}{selectedSkillFiles.size>0&&` · ${selectedSkillFiles.size}`}</summary><p>{t("也可以先创建人物，再到成员设置中添加技能和知识资料。", "You can add skills and knowledge after creating this person.")}</p>{availableSkills.map(skill=><label key={skill.name}><input type="checkbox" checked={selectedSkillFiles.has(skill.name)} onChange={()=>toggleSkill(skill.name)}/>{skill.title}</label>)}{[...selectedSkillFiles].filter(n=>!availableSkills.some(s=>s.name===n)).map(n=><label key={n}><input type="checkbox" checked onChange={()=>toggleSkill(n)}/>{n}</label>)}{showCreateSkill?<CreateSkillInline onSave={(skill,content)=>{sendCommand?.({type:'SAVE_SKILL',name:skill,content});setSelectedSkillFiles(prev=>new Set(prev).add(skill));setShowCreateSkill(false);touch();}} onCancel={()=>setShowCreateSkill(false)}/>:<button onClick={()=>setShowCreateSkill(true)}>{t("新建技能文件", "New skill file")}</button>}</details>
+    {identityOpen&&editAgent&&<AgentIdentityModal target={{kind:'definition',id:editAgent.id}} name={editAgent.name} onClose={()=>setIdentityOpen(false)}/>}
+  </TermModal>;
 }
-
 export default CreateAgentModal;

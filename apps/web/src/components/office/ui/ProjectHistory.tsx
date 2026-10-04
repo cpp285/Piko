@@ -1,8 +1,10 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 import { useEffect, useState } from "react";
 import { useOfficeStore, type ProjectSummary } from "@/store/office-store";
 import { sendCommand } from "@/lib/connection";
-import type { GatewayEvent } from "@office/shared";
+import type { GatewayEvent } from "@piko/shared";
 import { cn } from "@/lib/utils";
 import TermModal from "./primitives/TermModal";
 import TermButton from "./primitives/TermButton";
@@ -54,6 +56,7 @@ function ProjectViewer({ events, name, preview, onBack, onPreview }: {
   onBack: () => void;
   onPreview?: (preview: NonNullable<ProjectSummary["preview"]>) => void;
 }) {
+  useLocale();
   const messages: { id: string; agent: string; text: string; timestamp: number; type: string }[] = [];
 
   for (const event of events) {
@@ -110,20 +113,19 @@ function ProjectViewer({ events, name, preview, onBack, onPreview }: {
     <div className="flex flex-col h-full -m-4">
       {/* Viewer header with back button */}
       <div className="px-4 py-3 border-b border-border flex items-center gap-2.5 shrink-0">
-        <TermButton variant="dim" size="sm" onClick={onBack}>Back</TermButton>
+        <TermButton variant="dim" size="sm" onClick={onBack}>{tr("Back")}</TermButton>
         <span className="text-accent font-mono text-term font-semibold tracking-wide flex-1 truncate">
-          {name}
+          {trNode(name)}
         </span>
         {hasPreview(preview) && onPreview && (
-          <TermButton variant="success" size="sm" onClick={() => onPreview(preview)}>Preview</TermButton>
+          <TermButton variant="success" size="sm" onClick={() => onPreview(preview)}>{tr("Preview")}</TermButton>
         )}
       </div>
       {/* Messages */}
       <div className="flex-1 overflow-auto px-3 py-2">
         {messages.length === 0 && (
           <div className="text-muted-foreground font-mono text-term text-center py-10">
-            No messages in this project
-          </div>
+            {tr("No messages in this project")}</div>
         )}
         {messages.map((msg) => {
           const s = typeConfig[msg.type] ?? typeConfig.status;
@@ -131,7 +133,7 @@ function ProjectViewer({ events, name, preview, onBack, onPreview }: {
             <div key={msg.id} className={cn("mb-1.5 px-2.5 py-2 border-l-2", s.twBorder, s.twBg)}>
               <div className="flex gap-2 items-center mb-0.5">
                 <span className={cn("text-[9px] font-bold tracking-widest font-mono uppercase", s.twLabel)}>
-                  {s.label}
+                  {trNode(s.label)}
                 </span>
                 <span className="text-foreground text-[11px] font-semibold font-mono">
                   {msg.agent.replace(/^agent-/, "").split("-")[0]}
@@ -153,6 +155,7 @@ export default function ProjectHistory({ isOpen, onClose, onPreview }: {
   onClose: () => void;
   onPreview?: (preview: NonNullable<ProjectSummary["preview"]>, ratings?: Record<string, number>) => void;
 }) {
+  useLocale();
   const { projectList, viewingProjectId, viewingProjectEvents, viewingProjectName, clearViewingProject } = useOfficeStore();
   const [loaded, setLoaded] = useState(false);
 
@@ -192,7 +195,7 @@ export default function ProjectHistory({ isOpen, onClose, onPreview }: {
       open={isOpen}
       onClose={onClose}
       maxWidth={600}
-      title="Project History"
+      title={tr("Project History")}
       className="h-[70vh]"
     >
       {viewingProjectId && viewingProjectEvents.length > 0 ? (
@@ -207,10 +210,8 @@ export default function ProjectHistory({ isOpen, onClose, onPreview }: {
         <div>
           {projectList.length === 0 ? (
             <div className="text-muted-foreground font-mono text-term text-center py-10 leading-relaxed">
-              No archived projects yet.
-              <br />
-              Projects are saved when you click End Project.
-            </div>
+              {tr("No archived projects yet.")}<br />
+              {tr("Projects are saved when you click End Project.")}</div>
           ) : (
             projectList.map((p, i) => (
               <div
@@ -233,26 +234,26 @@ export default function ProjectHistory({ isOpen, onClose, onPreview }: {
                     {/* Meta row */}
                     <div className="flex gap-3 items-center flex-wrap">
                       <span className="text-[10px] font-mono text-muted-foreground">
-                        {formatRelativeDate(p.endedAt)}
+                        {trNode(formatRelativeDate(p.endedAt))}
                       </span>
                       <span className="text-[10px] font-mono text-accent opacity-60">
-                        {formatDuration(p.startedAt, p.endedAt)}
+                        {trNode(formatDuration(p.startedAt, p.endedAt))}
                       </span>
                       <span className="text-[10px] font-mono text-sem-blue/50">
-                        {p.agentNames.length} agent{p.agentNames.length !== 1 ? "s" : ""}
+                        {trNode(p.agentNames.length)} {tr("agent")}{trNode(p.agentNames.length !== 1 ? "s" : "")}
                       </span>
                       {p.tokenUsage && (p.tokenUsage.inputTokens > 0 || p.tokenUsage.outputTokens > 0) && (
                         <span
                           className="text-[10px] font-mono text-sem-green opacity-60"
-                          title={`Input: ${p.tokenUsage.inputTokens.toLocaleString()} / Output: ${p.tokenUsage.outputTokens.toLocaleString()}`}
+                          title={tr(`Input: ${p.tokenUsage.inputTokens.toLocaleString()} / Output: ${p.tokenUsage.outputTokens.toLocaleString()}`)}
                         >
-                          {"\u2191"}{formatTokens(p.tokenUsage.inputTokens)} {"\u2193"}{formatTokens(p.tokenUsage.outputTokens)}
+                          {trNode("\u2191")}{trNode(formatTokens(p.tokenUsage.inputTokens))} {trNode("\u2193")}{trNode(formatTokens(p.tokenUsage.outputTokens))}
                         </span>
                       )}
                     </div>
                     {/* Agent names */}
                     <div className="text-[10px] font-mono text-muted-foreground mt-1 opacity-70 truncate">
-                      {p.agentNames.join(" / ")}
+                      {trNode(p.agentNames.join(" / "))}
                     </div>
                     {/* Ratings */}
                     {p.ratings && Object.keys(p.ratings).length > 0 && (
@@ -261,7 +262,7 @@ export default function ProjectHistory({ isOpen, onClose, onPreview }: {
                           const stars = Math.min(5, Math.max(0, Math.round(val)));
                           return (
                             <span key={key} className="text-[9px] font-mono text-accent/70">
-                              {key.slice(0, 4)} {"★".repeat(stars)}{"☆".repeat(5 - stars)}
+                              {trNode(key.slice(0, 4))} {trNode("★".repeat(stars))}{trNode("☆".repeat(5 - stars))}
                             </span>
                           );
                         })}
@@ -276,8 +277,7 @@ export default function ProjectHistory({ isOpen, onClose, onPreview }: {
                       onClick={(e) => { e.stopPropagation(); handlePreview(p.preview!, p.ratings); }}
                       className="shrink-0 mt-0.5"
                     >
-                      Preview
-                    </TermButton>
+                      {tr("Preview")}</TermButton>
                   )}
                 </div>
               </div>

@@ -1,0 +1,110 @@
+[
+  {
+    "id": "default",
+    "theme": "Retro",
+    "asset": "retro-atelier",
+    "name": "Postal Atelier",
+    "zhName": "邮局工坊",
+    "description": "Oak desks, vintage letterpress and a citrus-tree lounge.",
+    "zhDescription": "橡木书桌、复古印刷机与柑橘树旁的休息区。"
+  },
+  {
+    "id": "Modern",
+    "theme": "Modern",
+    "asset": "garden-studio",
+    "name": "Garden Studio",
+    "zhName": "花园工作室",
+    "description": "A sunlit studio with a central garden, shared desks and a reading nook.",
+    "zhDescription": "环绕花园的共享工位，配有讨论区、阅读角和咖啡台。"
+  },
+  {
+    "id": "Cute Whimsical",
+    "theme": "Cute Whimsical",
+    "asset": "cloud-playhouse",
+    "name": "Cloud Playhouse",
+    "zhName": "云朵创作屋",
+    "description": "Pastel craft desks, little kites and a cloud-filled reading wall.",
+    "zhDescription": "粉彩手作桌、小风筝与云朵书墙。"
+  },
+  {
+    "id": "Mythological",
+    "theme": "Mythological",
+    "asset": "sun-temple",
+    "name": "Sun Scriptorium",
+    "zhName": "日晷书院",
+    "description": "A celestial mosaic, sandstone desks and a sunlit fountain.",
+    "zhDescription": "星象拼花、砂岩书桌与阳光下的喷泉。"
+  },
+  {
+    "id": "Cyberpunk",
+    "theme": "Cyberpunk",
+    "asset": "neon-rooftop",
+    "name": "Neon Rooftop",
+    "zhName": "霓虹天台",
+    "description": "A bright hardware studio above the city, with a hydroponic wall.",
+    "zhDescription": "城市上空的明亮硬件工作室，配有水培绿墙。"
+  },
+  {
+    "id": "SciFi",
+    "theme": "SciFi",
+    "asset": "orbital-lab",
+    "name": "Orbital Observatory",
+    "zhName": "轨道观测站",
+    "description": "Research consoles surround a star map beneath a planetary window.",
+    "zhDescription": "研究控制台环绕星图，窗外是蔚蓝星球。"
+  },
+  {
+    "id": "Post Apocalyptic",
+    "theme": "Post Apocalyptic",
+    "asset": "renewal-outpost",
+    "name": "Renewal Outpost",
+    "zhName": "新生驿站",
+    "description": "A reclaimed railway workshop with repaired tools and a vegetable garden.",
+    "zhDescription": "旧铁路工坊重新生长，修理工具与菜圃相伴。"
+  },
+  {
+    "id": "Historical",
+    "theme": "Historical",
+    "asset": "canal-archive",
+    "name": "Canal Archive",
+    "zhName": "运河图志馆",
+    "description": "A cartographers' guild with canal windows and brass instruments.",
+    "zhDescription": "面向运河的制图工会，收藏黄铜仪器与航海图。"
+  },
+  {
+    "id": "Eastern Fantasy",
+    "theme": "Eastern Fantasy",
+    "asset": "bamboo-pavilion",
+    "name": "Bamboo Pavilion",
+    "zhName": "竹影书阁",
+    "description": "Jade floors, inkstone desks and a bridge over a quiet water garden.",
+    "zhDescription": "青玉地面、笔墨书案与跨水小桥。"
+  },
+  {
+    "id": "Western Fantasy",
+    "theme": "Western Fantasy",
+    "asset": "woodland-guild",
+    "name": "Woodland Guild",
+    "zhName": "森语公会",
+    "description": "A woodland planning hall with a map rug and moss-green reading benches.",
+    "zhDescription": "森林议事厅，铺着地图地毯，设有苔绿阅读长椅。"
+  },
+  {
+    "id": "Gothic",
+    "theme": "Gothic",
+    "asset": "rose-library",
+    "name": "Rose Library",
+    "zhName": "玫窗书库",
+    "description": "Daylight through rose windows, pale stone and lilac writing chairs.",
+    "zhDescription": "日光穿过玫瑰花窗，映照浅色石材与丁香色座椅。"
+  },
+  {
+    "id": "DarkLegend",
+    "theme": "Dark Legend",
+    "asset": "moonstone-sanctum",
+    "name": "Moonstone Sanctum",
+    "zhName": "月石秘院",
+    "description": "Moonlit archives around a silver reflecting pool.",
+    "zhDescription": "银色映月池旁的静谧档案室。"
+  }
+]

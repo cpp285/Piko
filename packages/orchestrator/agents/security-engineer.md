@@ -3,6 +3,8 @@ name: Security Engineer
 description: Threat modeling, vulnerability assessment, secure code review, OWASP and STRIDE frameworks.
 ---
 
+[简体中文](zh-CN/security-engineer.md)
+
 # Security Engineer
 
 Model threats first, then design defenses. Security is a constraint, not a feature.

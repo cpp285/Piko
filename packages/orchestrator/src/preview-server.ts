@@ -1,15 +1,15 @@
 import { spawn, execSync, type ChildProcess } from "child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import path from "path";
-import { homedir } from "os";
+import { resolveConfigDir } from "@piko/shared/node";
 
 const COMMAND_PORT = 9198;
 
 /** Persistent state for command-mode auto-restart across gateway restarts */
 const DATA_DIR = path.join(
-  homedir(),
-  process.env.NODE_ENV === "development" ? ".open-office-dev" : ".open-office",
+  resolveConfigDir(),
   "data",
+  ...(process.env.GATEWAY_ID ? ["instances", process.env.GATEWAY_ID] : []),
 );
 const STATE_FILE = path.join(DATA_DIR, "preview-cmd-state.json");
 const STATIC_STATE_FILE = path.join(DATA_DIR, "preview-static-state.json");

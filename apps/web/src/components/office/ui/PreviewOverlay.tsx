@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { TERM_BG, TERM_DIM, TERM_SEM_GREEN, TERM_SEM_YELLOW } from "./termTheme";
@@ -10,11 +12,12 @@ import TermButton from "./primitives/TermButton";
 function StarRow({ label, icon, value, onChange }: {
   label: string; icon: string; value: number; onChange: (v: number) => void;
 }) {
+  useLocale();
   const [hover, setHover] = useState(0);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, height: 28 }}>
       <span style={{ width: 110, fontSize: "var(--font-size-base)", color: TERM_DIM, fontFamily: "var(--font-mono)" }}>
-        {icon} {label}
+        {trNode(icon)} {trNode(label)}
       </span>
       <div style={{ display: "flex", gap: 3 }} onMouseLeave={() => setHover(0)}>
         {[1, 2, 3, 4, 5].map((n) => (
@@ -27,17 +30,18 @@ function StarRow({ label, icon, value, onChange }: {
               color: n <= (hover || value) ? TERM_SEM_YELLOW : "rgba(255,255,255,0.15)",
               transition: "color 0.1s",
             }}
-          >{"\u2605"}</span>
+          >{trNode("\u2605")}</span>
         ))}
       </div>
       {value > 0 && (
-        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mono)" }}>{value}/5</span>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mono)" }}>{trNode(value)}/5</span>
       )}
     </div>
   );
 }
 
 function RatingPopup({ onSubmit, onSkip, initialRatings }: { onSubmit: (ratings: Record<string, number>) => void; onSkip: () => void; initialRatings?: Ratings }) {
+  useLocale();
   const [ratings, setRatings] = useState<Ratings>(initialRatings ?? {});
   const hasRatings = Object.values(ratings).some((v) => v && v > 0);
 
@@ -46,10 +50,10 @@ function RatingPopup({ onSubmit, onSkip, initialRatings }: { onSubmit: (ratings:
       open={true}
       onClose={onSkip}
       maxWidth={340}
-      title="Rate this project"
+      title={tr("Rate this project")}
       footer={
         <>
-          <TermButton variant="dim" onClick={onSkip} style={{ padding: "8px 18px" }}>Skip</TermButton>
+          <TermButton variant="dim" onClick={onSkip} style={{ padding: "8px 18px" }}>{tr("Skip")}</TermButton>
           <TermButton
             variant="success"
             onClick={() => {
@@ -61,7 +65,7 @@ function RatingPopup({ onSubmit, onSkip, initialRatings }: { onSubmit: (ratings:
             }}
             disabled={!hasRatings}
             style={{ padding: "8px 18px" }}
-          >Submit</TermButton>
+          >{tr("Submit")}</TermButton>
         </>
       }
     >
@@ -69,7 +73,7 @@ function RatingPopup({ onSubmit, onSkip, initialRatings }: { onSubmit: (ratings:
         {RATING_DIMENSIONS.map((d) => (
           <StarRow
             key={d.key}
-            label={d.label}
+            label={tr(d.label)}
             icon={d.icon}
             value={ratings[d.key] ?? 0}
             onChange={(v) => setRatings((prev) => ({ ...prev, [d.key]: v }))}
@@ -85,6 +89,7 @@ function PreviewOverlay({ url, onClose, savedRatings, submitted, onRate }: {
   savedRatings: Ratings; submitted: boolean;
   onRate: (ratings: Record<string, number>) => void;
 }) {
+  useLocale();
   const [status, setStatus] = useState<"loading" | "ready">("loading");
   const [showRating, setShowRating] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -169,7 +174,7 @@ function PreviewOverlay({ url, onClose, savedRatings, submitted, onRate }: {
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 9999,
-      backgroundColor: "rgba(0,0,0,0.85)",
+      backgroundColor: "rgba(52,73,57,0.08)",
       display: "flex", flexDirection: "column",
     }}>
       <div style={{
@@ -180,7 +185,7 @@ function PreviewOverlay({ url, onClose, savedRatings, submitted, onRate }: {
           flex: 1, color: "#888", fontSize: 14,
           fontFamily: "monospace", overflow: "hidden",
           textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>{url}</span>
+        }}>{trNode(url)}</span>
         <button
           onClick={() => setShowRating(true)}
           style={{
@@ -189,25 +194,25 @@ function PreviewOverlay({ url, onClose, savedRatings, submitted, onRate }: {
             color: submitted ? TERM_SEM_GREEN : TERM_SEM_YELLOW, fontSize: 11, cursor: "pointer",
             padding: "2px 10px", fontFamily: "monospace",
           }}
-        >{submitted ? "Rated \u2713" : "\u2605 Rate"}</button>
+        >{trNode(submitted ? "Rated \u2713" : "\u2605 Rate")}</button>
         <a
           href={url}
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            color: "#e8b040", fontSize: 12, textDecoration: "none",
-            padding: "2px 8px", border: "1px solid #3d2d10", fontFamily: "monospace",
+            color: "var(--term-accent)", fontSize: 12, textDecoration: "none",
+            padding: "2px 8px", border: "1px solid var(--term-border)", fontFamily: "monospace",
           }}
-        >Open in tab</a>
+        >{tr("Open in tab")}</a>
         <button
           onClick={handleClose}
           style={{
-            background: "none", border: "1px solid #444",
+            background: "none", border: "1px solid var(--term-border)",
             color: "#aaa", fontSize: 17, cursor: "pointer",
             borderRadius: 6, width: 28, height: 28,
             display: "flex", alignItems: "center", justifyContent: "center",
           }}
-        >{"\u2715"}</button>
+        >{trNode("\u2715")}</button>
       </div>
       <div style={{ flex: 1, position: "relative" }}>
         {status === "loading" && (
@@ -216,11 +221,11 @@ function PreviewOverlay({ url, onClose, savedRatings, submitted, onRate }: {
             alignItems: "center", justifyContent: "center", gap: 16,
           }}>
             <div style={{
-              width: 32, height: 32, border: "3px solid #333",
+              width: 32, height: 32, border: "3px solid var(--term-border)",
               borderTopColor: "#818cf8", borderRadius: "50%",
               animation: "preview-spin 0.8s linear infinite",
             }} />
-            <div style={{ color: "#888", fontSize: 15 }}>Starting server...</div>
+            <div style={{ color: "#888", fontSize: 15 }}>{tr("Starting server...")}</div>
             <style>{`@keyframes preview-spin { to { transform: rotate(360deg); } }`}</style>
           </div>
         )}

@@ -1,7 +1,7 @@
 import * as Ably from "ably";
 import { config } from "./config.js";
-import { CommandSchema } from "@office/shared";
-import type { GatewayEvent, Command, UserRole } from "@office/shared";
+import { CommandSchema } from "@piko/shared";
+import type { GatewayEvent, Command, UserRole } from "@piko/shared";
 import type { Channel, CommandMeta } from "./transport.js";
 
 let client: Ably.Realtime | null = null;

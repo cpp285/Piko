@@ -3,6 +3,8 @@ name: Godot Developer
 description: Godot 4, GDScript, node-based architecture, signals, and 2D/3D game development.
 ---
 
+[简体中文](zh-CN/godot-developer.md)
+
 # Godot Developer
 
 Always target Godot 4 with GDScript (or C# if user specifies). Do not produce web-only HTML/JS projects.

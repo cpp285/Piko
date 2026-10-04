@@ -1,10 +1,12 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState } from "react";
 import { nanoid } from "nanoid";
-import type { AgentDefinition } from "@office/shared";
+import type { AgentDefinition } from "@piko/shared";
 import { sendCommand } from "@/lib/connection";
-import { folderPickCallbacks } from "@/store/office-store";
+import { useOfficeStore, folderPickCallbacks } from "@/store/office-store";
 import { BACKEND_OPTIONS } from "./office-constants";
 import { generateRandomName } from "./office-utils";
 import { TERM_PANEL, TERM_DIM, TERM_BORDER, TERM_BG, TERM_GREEN, TERM_TEXT, TERM_TEXT_BRIGHT, TERM_SEM_GREEN, TERM_SEM_YELLOW, TERM_SEM_RED } from "./termTheme";
@@ -25,7 +27,10 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
   /** When set, directory is locked to project directory (project-centric mode) */
   projectDir?: string;
 }) {
-  const [selectedBackend, setSelectedBackend] = useState("claude");
+  useLocale();
+  const defaultBackend = useOfficeStore(s => s.defaultBackend);
+  const [selectedBackend, setSelectedBackend] = useState<string | null>(null);
+  const effectiveBackend = selectedBackend ?? defaultBackend;
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedDef, setSelectedDef] = useState<AgentDefinition | null>(null);
   const [hireName, setHireName] = useState(() => generateRandomName());
@@ -38,7 +43,7 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
   const handleSelectAgent = (def: AgentDefinition) => {
     // Project mode: instant hire — skip the overlay (auto-name, project dir)
     if (dirLocked) {
-      onHire(def, selectedBackend, workDir || undefined, undefined);
+      onHire(def, effectiveBackend, workDir || undefined, undefined);
       return;
     }
     if (selectedDef?.id === def.id) {
@@ -51,7 +56,7 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
 
   const handleDoHire = () => {
     if (!selectedDef) return;
-    onHire(selectedDef, selectedBackend, workDir || undefined, hireName.trim() || undefined);
+    onHire(selectedDef, effectiveBackend, workDir || undefined, hireName.trim() || undefined);
   };
 
   /** Render a single agent card — avatar + role */
@@ -64,7 +69,7 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
         onClick={() => handleSelectAgent(def)}
         onMouseEnter={() => setHoveredId(def.id)}
         onMouseLeave={() => setHoveredId(null)}
-        title={def.skills ? `Skills: ${def.skills}` : def.role}
+        title={tr(def.skills ? `Skills: ${def.skills}` : def.role)}
         style={{
           display: "flex", flexDirection: "column", alignItems: "center",
           padding: "10px 6px 8px", position: "relative",
@@ -83,19 +88,19 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
           fontSize: 11, fontFamily: "var(--font-sans)", fontWeight: 500,
           color: isSelected ? TERM_GREEN : TERM_TEXT,
           width: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-        }}>{def.role}</div>
+        }}>{trNode(def.role)}</div>
         {isHovered && (
           <span style={{ position: "absolute", top: 3, right: 3, display: "flex", gap: 2, alignItems: "center" }}>
             <span
               onClick={(e) => { e.stopPropagation(); onEdit(def); }}
               style={{ fontSize: 14, color: TERM_DIM, cursor: "pointer", padding: "2px 3px", lineHeight: 1 }}
-              title="Edit"
+              title={tr("Edit")}
             >&#9998;</span>
             {showDelete && (
               <span
                 onClick={(e) => { e.stopPropagation(); onDelete(def.id); }}
                 style={{ fontSize: 15, color: TERM_SEM_RED, cursor: "pointer", padding: "2px 3px", fontWeight: 700, lineHeight: 1 }}
-                title="Delete"
+                title={tr("Delete")}
               >&times;</span>
             )}
           </span>
@@ -110,10 +115,10 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
       onClose={onClose}
       maxWidth={440}
       zIndex={100}
-      title={dirLocked ? "Add Agent to Project" : "Hire Agent"}
+      title={tr(dirLocked ? "Add Agent to Project" : "Hire Agent")}
       className="max-h-[min(712px,85vh)]"
       footer={
-        <TermButton variant="dim" onClick={onClose}>Cancel</TermButton>
+        <TermButton variant="dim" onClick={onClose}>{tr("Cancel")}</TermButton>
       }
     >
       <div>
@@ -127,18 +132,18 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
             borderRadius: "var(--radius-sm)",
             fontSize: 11, fontFamily: "var(--font-mono)", color: TERM_TEXT,
           }}>
-            <span style={{ color: TERM_DIM }}>DIR</span>
+            <span style={{ color: TERM_DIM }}>{tr("DIR")}</span>
             <span style={{ color: TERM_TEXT_BRIGHT, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{workDir}</span>
           </div>
         )}
 
         {/* Backend selector */}
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: TERM_DIM, marginBottom: 5, fontFamily: "var(--font-sans)", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase" as const }}>AI BACKEND</div>
+          <div style={{ fontSize: 11, color: TERM_DIM, marginBottom: 5, fontFamily: "var(--font-sans)", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase" as const }}>{tr("AI BACKEND")}</div>
           <div style={{ display: "flex", gap: 4 }}>
             {BACKEND_OPTIONS.map((b) => {
               const available = !detectedBackends || detectedBackends.length === 0 || detectedBackends.includes(b.id);
-              const isSelected = selectedBackend === b.id;
+              const isSelected = effectiveBackend === b.id;
               return (
                 <button
                   key={b.id}
@@ -159,7 +164,7 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
                     backgroundColor: available ? TERM_SEM_GREEN : TERM_SEM_YELLOW,
                     marginRight: 4, verticalAlign: "middle",
                   }} />
-                  {b.name}
+                  {trNode(b.name)}
                 </button>
               );
             })}
@@ -169,15 +174,15 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
         {/* Scrollable agent list */}
         <div data-scrollbar style={{ maxHeight: "55vh", overflowY: "auto", overflowX: "hidden" }}>
           {/* Built-in agents */}
-          <div style={{ fontSize: 11, color: TERM_DIM, marginBottom: 5, fontFamily: "var(--font-sans)", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase" as const }}>BUILT-IN AGENTS</div>
+          <div style={{ fontSize: 11, color: TERM_DIM, marginBottom: 5, fontFamily: "var(--font-sans)", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase" as const }}>{tr("BUILT-IN AGENTS")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
-            {builtinAgents.map((def) => renderAgentCard(def, false))}
+            {trNode(builtinAgents.map((def) => renderAgentCard(def, false)))}
           </div>
 
           {/* Custom agents + Create New card */}
-          <div style={{ fontSize: 11, color: TERM_DIM, marginBottom: 5, fontFamily: "var(--font-sans)", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase" as const }}>MY AGENTS</div>
+          <div style={{ fontSize: 11, color: TERM_DIM, marginBottom: 5, fontFamily: "var(--font-sans)", fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase" as const }}>{tr("MY AGENTS")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
-            {customAgents.map((def) => renderAgentCard(def, true))}
+            {trNode(customAgents.map((def) => renderAgentCard(def, true)))}
             {/* "+ Create New" card */}
             <button
               onClick={onCreate}
@@ -195,7 +200,7 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = TERM_BORDER + "80"; e.currentTarget.style.color = TERM_DIM; }}
             >
               <span style={{ fontSize: 22, lineHeight: 1, fontWeight: 300 }}>+</span>
-              <span style={{ fontSize: 11, fontFamily: "var(--font-sans)", fontWeight: 500 }}>Create New</span>
+              <span style={{ fontSize: 11, fontFamily: "var(--font-sans)", fontWeight: 500 }}>{tr("Create New")}</span>
             </button>
           </div>
         </div>
@@ -203,8 +208,7 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
         {/* Project mode hint */}
         {dirLocked && (
           <div style={{ fontSize: 11, color: TERM_DIM, fontFamily: "var(--font-sans)", textAlign: "center", padding: "8px 0 2px", opacity: 0.7 }}>
-            Click an agent to add it instantly
-          </div>
+            {tr("Click an agent to add it instantly")}</div>
         )}
 
         {/* -- Centered overlay: workDir + name + hire (non-project mode only) -- */}
@@ -213,7 +217,7 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
             style={{
               position: "fixed", inset: 0, zIndex: 200,
               display: "flex", alignItems: "center", justifyContent: "center",
-              backgroundColor: "rgba(0,0,0,0.5)",
+              backgroundColor: "rgba(52,73,57,0.08)",
             }}
             onClick={(e) => { if (e.target === e.currentTarget) setSelectedDef(null); }}
           >
@@ -223,14 +227,14 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
                 padding: "16px",
                 border: `1px solid ${TERM_GREEN}50`,
                 backgroundColor: TERM_BG,
-                boxShadow: `0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px ${TERM_GREEN}15`,
+                boxShadow: `0 12px 40px rgba(52,73,57,0.08), 0 0 0 1px ${TERM_GREEN}15`,
                 display: "flex", flexDirection: "column", gap: 10,
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <SpriteAvatar palette={selectedDef.palette} zoom={2} ready={assetsReady} />
                 <div style={{ fontSize: 13, color: TERM_GREEN, fontFamily: "var(--font-mono)", fontWeight: 600, flex: 1 }}>
-                  {selectedDef.role}
+                  {trNode(selectedDef.role)}
                 </div>
                 <button
                   onClick={() => setSelectedDef(null)}
@@ -240,14 +244,14 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
               {/* Working directory */}
               <div>
                 <div style={{ fontSize: 11, color: TERM_DIM, marginBottom: 3, fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>
-                  WORKING DIRECTORY{dirLocked && <span style={{ opacity: 0.5, marginLeft: 6 }}>(project)</span>}
+                  {tr("WORKING DIRECTORY")}{dirLocked && <span style={{ opacity: 0.5, marginLeft: 6 }}>{tr("(project)")}</span>}
                 </div>
                 <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                   <TermInput
                     type="text"
                     value={workDir}
                     onChange={(e) => !dirLocked && setWorkDir(e.target.value)}
-                    placeholder="~/.open-office/projects"
+                    placeholder={tr("~/.piko/projects")}
                     style={{ flex: 1, opacity: dirLocked ? 0.6 : 1 }}
                     readOnly={dirLocked}
                   />
@@ -259,22 +263,21 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
                         folderPickCallbacks.set(rid, (p) => setWorkDir(p));
                         sendCommand({ type: "PICK_FOLDER", requestId: rid });
                       }}
-                    >Browse</TermButton>
+                    >{tr("Browse")}</TermButton>
                   )}
                 </div>
                 {!dirLocked && (
                   <div style={{ fontSize: 10, color: TERM_DIM, marginTop: 2, fontFamily: "var(--font-mono)", opacity: 0.7 }}>
-                    Empty = default workspace
-                  </div>
+                    {tr("Empty = default workspace")}</div>
                 )}
               </div>
               {/* Name */}
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                  <span style={{ fontSize: 11, color: TERM_DIM, fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>NAME</span>
+                  <span style={{ fontSize: 11, color: TERM_DIM, fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>{tr("NAME")}</span>
                   <button
                     onClick={() => setHireName(generateRandomName())}
-                    title="Randomize name"
+                    title={tr("Randomize name")}
                     style={{
                       background: "none", border: "none", cursor: "pointer",
                       color: TERM_DIM, fontSize: 13, padding: 0, lineHeight: 1,
@@ -282,13 +285,13 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
                     }}
                     onMouseEnter={(e) => { e.currentTarget.style.color = TERM_GREEN; }}
                     onMouseLeave={(e) => { e.currentTarget.style.color = TERM_DIM; }}
-                  >&#x21bb;</button>
+                  >{tr("&#x21bb;")}</button>
                 </div>
                 <TermInput
                   type="text"
                   value={hireName}
                   onChange={(e) => setHireName(e.target.value)}
-                  placeholder="Agent display name"
+                  placeholder={tr("Agent display name")}
                 />
               </div>
               {/* Hire button */}
@@ -297,8 +300,7 @@ function HireModal({ agentDefs, onHire, onCreate, onEdit, onDelete, onClose, ass
                 onClick={handleDoHire}
                 style={{ padding: "9px", fontWeight: 700, width: "100%" }}
               >
-                hire
-              </TermButton>
+                {tr("hire")}</TermButton>
             </div>
           </div>
         )}

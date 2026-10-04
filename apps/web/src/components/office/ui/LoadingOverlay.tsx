@@ -1,8 +1,12 @@
 "use client";
+import { CHARACTER_APPEARANCES, CHARACTER_COUNT } from "@piko/shared";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState, useEffect } from "react";
 
 function LoadingDots() {
+  useLocale();
   const [dots, setDots] = useState("");
   useEffect(() => {
     const timer = setInterval(() => {
@@ -10,11 +14,12 @@ function LoadingDots() {
     }, 400);
     return () => clearInterval(timer);
   }, []);
-  return <>{dots}</>;
+  return <>{trNode(dots)}</>;
 }
 
 /** Loading overlay with a random pixel character walking back and forth */
 function LoadingOverlay({ visible }: { visible: boolean }) {
+  useLocale();
   const [charIdx, setCharIdx] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [opacity, setOpacity] = useState(1);
@@ -22,14 +27,14 @@ function LoadingOverlay({ visible }: { visible: boolean }) {
 
   // Pick random character only on client to avoid hydration mismatch
   useEffect(() => {
-    setCharIdx(Math.floor(Math.random() * 6));
+    setCharIdx(Math.floor(Math.random() * CHARACTER_COUNT));
     setMounted(true);
   }, []);
 
   // When visible goes true again (e.g. office switch), reset fade state & pick new char
   useEffect(() => {
     if (visible) {
-      setCharIdx(Math.floor(Math.random() * 6));
+      setCharIdx(Math.floor(Math.random() * CHARACTER_COUNT));
       setOpacity(1);
       setRemoved(false);
     }
@@ -46,15 +51,15 @@ function LoadingOverlay({ visible }: { visible: boolean }) {
 
   if (removed || !mounted) return null;
 
-  const sheetUrl = `/assets/characters/char_${charIdx}.png`;
+  const sheetUrl = CHARACTER_APPEARANCES[charIdx].asset;
   const zoom = 4;
   const displayW = 16 * zoom; // 64
   const displayH = 32 * zoom; // 128
 
   return (
     <div
-      className="absolute inset-0 z-50 bg-[#0e0c1a] flex flex-col items-center justify-center gap-4 transition-opacity duration-[600ms] ease-out"
-      style={{ opacity, pointerEvents: visible ? "auto" : "none" }}
+      className="absolute inset-0 z-50 bg-term-bg flex flex-col items-center justify-center gap-4 transition-opacity ease-out"
+      style={{ opacity, transitionDuration: '600ms', pointerEvents: visible ? "auto" : "none" }}
     >
       <style>{`
         @keyframes loading-walk-sprite {
@@ -84,7 +89,7 @@ function LoadingOverlay({ visible }: { visible: boolean }) {
         }} />
       </div>
       <div className="font-mono text-[13px] text-muted-foreground tracking-wide">
-        Loading office<span className="inline-block w-6 text-left">
+        {tr("Loading office")}<span className="inline-block w-6 text-left">
           <LoadingDots />
         </span>
       </div>

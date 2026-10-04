@@ -1,19 +1,18 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import JSZip from 'jszip'
 import type { OfficeLayout } from '../types'
 import { loadRoomZipFromUrl } from '../layout/roomZipLoader'
+import { tr, useLocale } from '@/lib/ui-language'
+import TermModal from './primitives/TermModal'
 
 interface OfficeEntry {
   id: string
   name: string
+  theme: string
+  description?: string
   file: string
-  thumbnail?: string
-}
-
-interface OfficeEntryWithThumb extends OfficeEntry {
-  thumbUrl?: string
+  thumbnail: string
 }
 
 interface OfficeSwitcherProps {
@@ -24,282 +23,76 @@ interface OfficeSwitcherProps {
 }
 
 const OFFICES_BASE = '/offices'
-
-/** Extract background image from a zip as a blob URL for thumbnail */
-async function extractThumbnail(zipUrl: string): Promise<string | null> {
-  try {
-    const res = await fetch(zipUrl)
-    if (!res.ok) return null
-    const ab = await res.arrayBuffer()
-    const zip = await JSZip.loadAsync(ab)
-    const roomFile = zip.file('room.json')
-    if (!roomFile) return null
-    const roomJson = JSON.parse(await roomFile.async('text'))
-    const bgFilename = roomJson.backgroundFile
-    if (!bgFilename) return null
-    const bgFile = zip.file(bgFilename)
-    if (!bgFile) return null
-    const blob = new Blob([await bgFile.async('arraybuffer')], { type: 'image/png' })
-    return URL.createObjectURL(blob)
-  } catch {
-    return null
-  }
-}
+const DEFAULT_OFFICE_ID = 'Modern'
 
 export default function OfficeSwitcher({ isOpen, onClose, onSelect, currentOfficeId }: OfficeSwitcherProps) {
-  const [offices, setOffices] = useState<OfficeEntryWithThumb[]>([])
-  const [loading, setLoading] = useState(false)
+  useLocale()
+  const [offices, setOffices] = useState<OfficeEntry[]>([])
   const [loadingId, setLoadingId] = useState<string | null>(null)
-  const [hovered, setHovered] = useState<string | null>(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (!isOpen) return
-    let cancelled = false
-
-    ;(async () => {
-      try {
-        const res = await fetch(`${OFFICES_BASE}/index.json`)
-        const data: OfficeEntry[] = await res.json()
-        if (cancelled) return
-        setOffices(data.map((e) => ({ ...e })))
-
-        // Extract thumbnails from zips in parallel
-        const thumbPromises = data.map(async (entry) => {
-          if (entry.thumbnail) return { id: entry.id, url: `${OFFICES_BASE}/${entry.thumbnail}` }
-          const url = await extractThumbnail(`${OFFICES_BASE}/${entry.file}`)
-          return { id: entry.id, url }
-        })
-        const thumbs = await Promise.all(thumbPromises)
-        if (cancelled) return
-        setOffices((prev) =>
-          prev.map((e) => {
-            const t = thumbs.find((th) => th.id === e.id)
-            return t?.url ? { ...e, thumbUrl: t.url } : e
-          }),
-        )
-      } catch (err) {
-        console.error('[OfficeSwitcher] Failed to load index:', err)
-      }
-    })()
-
-    return () => { cancelled = true }
+    const controller = new AbortController()
+    setError('')
+    fetch(`${OFFICES_BASE}/index.json`, { signal: controller.signal })
+      .then(response => { if (!response.ok) throw new Error('index'); return response.json() })
+      .then(setOffices)
+      .catch(() => { if (!controller.signal.aborted) setError('场景加载失败，请重新打开后重试。') })
+    return () => controller.abort()
   }, [isOpen])
 
-  const handleSelect = useCallback(async (entry: OfficeEntryWithThumb) => {
-    if (loading) return
-    setLoading(true)
+  const handleSelect = useCallback(async (entry: OfficeEntry) => {
+    if (loadingId) return
     setLoadingId(entry.id)
+    setError('')
     try {
       const result = await loadRoomZipFromUrl(`${OFFICES_BASE}/${entry.file}`)
-      if (result) {
-        try { localStorage.setItem('office-selected-id', entry.id) } catch {}
-        onSelect(result.layout, result.backgroundImage)
-        onClose()
-      }
-    } catch (err) {
-      console.error('[OfficeSwitcher] Failed to load office:', err)
+      if (!result) throw new Error('room')
+      try { localStorage.setItem('piko-selected-id', entry.id) } catch {}
+      onSelect(result.layout, result.backgroundImage)
+      onClose()
+    } catch {
+      setError('场景加载失败，请重新打开后重试。')
     } finally {
-      setLoading(false)
       setLoadingId(null)
     }
-  }, [loading, onSelect, onClose])
+  }, [loadingId, onSelect, onClose])
 
-  if (!isOpen) return null
-
-  return (
-    <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.6)',
-          zIndex: 99,
-        }}
-      />
-      {/* Modal */}
-      <div
-        style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          zIndex: 100,
-          background: 'rgba(20, 20, 25, 0.92)',
-          backdropFilter: 'blur(16px)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: 12,
-          padding: 0,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-          width: 480,
-          maxWidth: '90vw',
-          maxHeight: '80vh',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '8px 12px',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          }}
-        >
-          <span style={{ fontSize: '15px', color: 'rgba(255, 255, 255, 0.9)', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
-            Switch Office
-          </span>
-          <button
-            onClick={onClose}
-            onMouseEnter={() => setHovered('close')}
-            onMouseLeave={() => setHovered(null)}
-            style={{
-              background: hovered === 'close' ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-              border: 'none',
-              color: 'rgba(255, 255, 255, 0.6)',
-              fontSize: '15px',
-              cursor: 'pointer',
-              padding: '0 4px',
-              lineHeight: 1,
-            }}
-          >X</button>
+  return <TermModal open={isOpen} onClose={onClose} title={tr('Switch Office')} maxWidth={1000}>
+    <p style={{ margin: '0 0 16px', color: 'var(--term-dim)', lineHeight: 1.8 }}>{tr('Twelve themes, twelve new places to work. Your team stays with you.')}</p>
+    {error && <p role="alert" style={{ color: 'var(--term-sem-red)' }}>{tr(error)}</p>}
+    {!offices.length && !error && <p>{tr('Loading...')}</p>}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: 16 }}>
+      {offices.map(entry => <button key={entry.id} disabled={loadingId !== null} onClick={() => handleSelect(entry)} aria-pressed={currentOfficeId === entry.id} style={{ padding: 0, border: `2px solid ${currentOfficeId === entry.id ? 'var(--term-accent)' : 'var(--term-border)'}`, borderRadius: 12, overflow: 'hidden', background: 'var(--term-panel)', color: 'var(--term-text)', textAlign: 'left', cursor: loadingId ? 'wait' : 'pointer' }}>
+        <img src={`${OFFICES_BASE}/${entry.thumbnail}`} alt={tr(entry.name)} loading="lazy" decoding="async" style={{ display: 'block', width: '100%', aspectRatio: '1', objectFit: 'contain', imageRendering: 'pixelated', background: 'var(--term-bg)' }} />
+        <div style={{ padding: 14 }}>
+          <div style={{ fontSize: 11, color: 'var(--term-dim)', marginBottom: 7 }}>{tr(entry.theme)}</div>
+          <strong style={{ fontSize: 15 }}>{tr(entry.name)}</strong><span style={{ float: 'right', color: 'var(--term-accent)', fontSize: 12 }}>{tr(loadingId === entry.id ? 'Loading...' : currentOfficeId === entry.id ? '当前场景' : '使用场景')}</span>
+          {entry.description && <p style={{ fontSize: 12, lineHeight: 1.7, color: 'var(--term-dim)', margin: '7px 0 0' }}>{tr(entry.description)}</p>}
         </div>
-
-        {/* Office grid — outer scroll wrapper, inner grid */}
-        <div
-          data-scrollbar
-          style={{
-            overflowY: 'auto',
-            flex: 1,
-            minHeight: 0,
-          }}
-        >
-        <div
-          style={{
-            padding: '12px',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '8px',
-          }}
-        >
-          {offices.length === 0 && (
-            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, padding: 20, textAlign: 'center', gridColumn: '1 / -1' }}>
-              Loading...
-            </div>
-          )}
-          {offices.map((entry) => {
-            const isCurrent = currentOfficeId === entry.id
-            const isLoading = loadingId === entry.id
-            const isHovered = hovered === entry.id
-            const thumbSrc = entry.thumbUrl || (entry.thumbnail ? `${OFFICES_BASE}/${entry.thumbnail}` : undefined)
-            return (
-              <button
-                key={entry.id}
-                onClick={() => handleSelect(entry)}
-                onMouseEnter={() => setHovered(entry.id)}
-                onMouseLeave={() => setHovered(null)}
-                disabled={loading}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  background: isHovered && !isCurrent
-                    ? 'rgba(255, 255, 255, 0.06)'
-                    : 'transparent',
-                  border: isCurrent
-                    ? '2px solid rgba(130, 160, 255, 0.6)'
-                    : '2px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: 8,
-                  padding: 0,
-                  cursor: loading ? 'wait' : 'pointer',
-                  overflow: 'hidden',
-                  opacity: loading && !isLoading ? 0.5 : 1,
-                }}
-              >
-                {/* Square thumbnail */}
-                <div
-                  style={{
-                    width: '100%',
-                    aspectRatio: '1',
-                    position: 'relative',
-                    background: '#0a0a14',
-                    flexShrink: 0,
-                  }}
-                >
-                  {thumbSrc && (
-                    <img
-                      src={thumbSrc}
-                      alt={entry.name}
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        imageRendering: 'pixelated',
-                      }}
-                    />
-                  )}
-                  {isLoading && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'rgba(0, 0, 0, 0.7)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'rgba(160, 185, 255, 0.9)',
-                        fontSize: 13,
-                        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-                      }}
-                    >
-                      Loading...
-                    </div>
-                  )}
-                </div>
-                {/* Name */}
-                <div
-                  style={{
-                    padding: '5px 4px',
-                    fontSize: 11,
-                    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-                    color: isCurrent ? 'rgba(160, 185, 255, 0.9)' : 'rgba(255, 255, 255, 0.6)',
-                    textAlign: 'center',
-                    width: '100%',
-                  }}
-                >
-                  {entry.name}
-                </div>
-              </button>
-            )
-          })}
-        </div>
-        </div>
-      </div>
-    </>
-  )
+      </button>)}
+    </div>
+  </TermModal>
 }
 
-/** Load the default office on startup */
-export async function loadDefaultOffice(): Promise<{ layout: import('../types').OfficeLayout; backgroundImage: HTMLImageElement | null; officeId: string } | null> {
+/** Keep the original twelve theme IDs and migrate the interim garden-only choice. */
+export async function loadDefaultOffice(): Promise<{ layout: OfficeLayout; backgroundImage: HTMLImageElement | null; officeId: string } | null> {
   try {
-    const res = await fetch(`${OFFICES_BASE}/index.json`)
-    if (!res.ok) return null
-    const offices: OfficeEntry[] = await res.json()
-    // Use saved selection or fall back to first entry
+    const response = await fetch(`${OFFICES_BASE}/index.json`)
+    if (!response.ok) return null
+    const offices: OfficeEntry[] = await response.json()
     let selectedId: string | null = null
-    try { selectedId = localStorage.getItem('office-selected-id') } catch {}
-    const entry = offices.find((o) => o.id === selectedId) || offices[0]
+    try { selectedId = localStorage.getItem('piko-selected-id') } catch {}
+    if (selectedId === 'garden-studio') selectedId = DEFAULT_OFFICE_ID
+    const entry = offices.find(office => office.id === selectedId) || offices.find(office => office.id === DEFAULT_OFFICE_ID) || offices[0]
     if (!entry) return null
-
     const result = await loadRoomZipFromUrl(`${OFFICES_BASE}/${entry.file}`)
     if (!result) return null
-    return { layout: result.layout, backgroundImage: result.backgroundImage, officeId: entry.id }
-  } catch (err) {
-    console.error('[loadDefaultOffice] Failed:', err)
+    try { localStorage.setItem('piko-selected-id', entry.id) } catch {}
+    return { ...result, officeId: entry.id }
+  } catch (error) {
+    console.error('[loadDefaultOffice] Failed:', error)
     return null
   }
 }

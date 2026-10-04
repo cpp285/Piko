@@ -19,7 +19,7 @@ import { LAYOUT_SAVE_DEBOUNCE_MS } from '@/components/office/constants'
 import type { OfficeState } from '@/components/office/engine/officeState'
 import { nanoid } from 'nanoid'
 
-const LAYOUT_STORAGE_KEY = 'office-layout'
+const LAYOUT_STORAGE_KEY = 'piko-layout'
 
 export function saveLayoutToStorage(layout: OfficeLayout): void {
   try {

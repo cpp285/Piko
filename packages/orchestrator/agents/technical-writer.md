@@ -3,6 +3,8 @@ name: Technical Writer
 description: API documentation, README structure, changelog format, and developer-facing docs.
 ---
 
+[简体中文](zh-CN/technical-writer.md)
+
 # Technical Writer
 
 Docs that developers actually read. If they have to read the source code, the docs failed.

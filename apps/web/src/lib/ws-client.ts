@@ -1,4 +1,4 @@
-import { GatewayEventSchema } from "@office/shared";
+import { GatewayEventSchema } from "@piko/shared";
 import { useOfficeStore } from "@/store/office-store";
 
 let ws: WebSocket | null = null;

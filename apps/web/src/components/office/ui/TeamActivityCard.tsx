@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import type { TeamChatMessage } from "@/store/office-store";
 import SpriteAvatar from "./SpriteAvatar";
@@ -24,6 +26,7 @@ function TeamActivityCard({ msg, agents, assetsReady, maxChars = 150, shadow, ex
   shadow?: boolean;
   expandable?: boolean;
 }) {
+  useLocale();
   const cfg = TEAM_MSG_COLORS[msg.messageType] ?? TEAM_MSG_COLORS.status;
   const fromAgent = agents.get(msg.fromAgentId);
   const toAgent = msg.toAgentId ? agents.get(msg.toAgentId) : undefined;
@@ -34,7 +37,7 @@ function TeamActivityCard({ msg, agents, assetsReady, maxChars = 150, shadow, ex
       padding: "8px 10px",
       backgroundColor: cfg.bg, borderLeft: `2px solid ${cfg.border}`,
       border: `1px solid ${cfg.border}40`,
-      boxShadow: shadow ? "0 2px 12px rgba(0,0,0,0.5)" : undefined,
+      boxShadow: shadow ? "0 2px 12px rgba(52,73,57,0.08)" : undefined,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
         {fromAgent?.palette !== undefined && (
@@ -59,7 +62,7 @@ function TeamActivityCard({ msg, agents, assetsReady, maxChars = 150, shadow, ex
           backgroundColor: cfg.border + "20", color: cfg.border,
           border: `1px solid ${cfg.border}40`, fontFamily: "monospace",
         }}>
-          {cfg.label}
+          {trNode(cfg.label)}
         </span>
       </div>
       {expandable
@@ -69,7 +72,7 @@ function TeamActivityCard({ msg, agents, assetsReady, maxChars = 150, shadow, ex
             fontSize: 12, color: "#b09878", wordBreak: "break-word",
             maxHeight: 80, overflow: "hidden", fontFamily: "monospace",
           }}>
-            {msgText.slice(0, maxChars)}{msgText.length > maxChars ? "..." : ""}
+            {trNode(msgText.slice(0, maxChars))}{trNode(msgText.length > maxChars ? "..." : "")}
           </div>
         )
       }

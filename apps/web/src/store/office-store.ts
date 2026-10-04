@@ -1,5 +1,11 @@
+import { receiveAgentDefinitionResult } from "@/lib/agent-definition-client";
+import { receiveWorkroomResult } from "@/lib/workroom-client";
+import { EMPTY_WORKROOM, type WorkroomSnapshot } from "@piko/shared";
+import "@/lib/migrate-storage";
 import { create } from "zustand";
-import type { AgentStatus, GatewayEvent, TaskResultPayload, AgentDefinition, UserRole } from "@office/shared";
+import type { AgentStatus, GatewayEvent, TaskResultPayload, AgentDefinition, UserRole, WorkspaceSnapshot } from "@piko/shared";
+import { activeWorkspaceTask, reconcileProjectMembers } from "@piko/shared";
+import { tr } from "@/lib/ui-language";
 import { tunnelRewrite } from "@/components/office/ui/office-utils";
 import { sendCommand } from "@/lib/connection";
 
@@ -28,7 +34,7 @@ function notifyTaskDone(agentName: string, summary: string) {
     if (!granted) granted = (await requestPermission()) === "granted";
     if (granted) {
       sendNotification({
-        title: `${agentName} — Task Complete`,
+        title: `${agentName} — ${tr("Task Complete")}`,
         body: summary.slice(0, 200),
       });
     }
@@ -135,6 +141,10 @@ export interface ProjectSummary {
 }
 
 interface OfficeStore {
+  workroom: WorkroomSnapshot;
+  workroomResult: Extract<GatewayEvent, { type: "WORKROOM_RESULT" }> | null;
+  workspace: WorkspaceSnapshot;
+  workspaceLoaded: boolean;
   agents: Map<string, AgentState>;
   teamMessages: TeamChatMessage[];
   teamPhases: Map<string, TeamPhaseState>;
@@ -149,9 +159,11 @@ interface OfficeStore {
   viewingProjectEvents: GatewayEvent[];
   viewingProjectName: string | null;
   pendingPreviewUrl: string | null;
-  configResult: { success: boolean; message: string; telegramConnected?: boolean; tunnelRunning?: boolean } | null;
-  configData: { telegramBotToken?: string; telegramAllowedUsers?: string[]; telegramConnected?: boolean; worktreeEnabled?: boolean; autoMergeEnabled?: boolean; tunnelBaseUrl?: string; tunnelToken?: string; tunnelRunning?: boolean } | null;
+  configResult: Extract<GatewayEvent, { type: "CONFIG_SAVED" }> | null;
+  personaResult: Extract<GatewayEvent, { type: "AGENT_PERSONA" }> | null;
+  configData: Extract<GatewayEvent, { type: "CONFIG_LOADED" }> | null;
   detectedBackends: string[];
+  defaultBackend: string;
   availableSkills: Array<{ name: string; title: string; isFolder: boolean }>;
   connected: boolean;
   hydrated: boolean;
@@ -187,7 +199,7 @@ interface OfficeStore {
 function getGatewayId(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem("office_connection") ?? localStorage.getItem("office_connection");
+    const raw = sessionStorage.getItem("piko_connection") ?? localStorage.getItem("piko_connection");
     if (!raw) return null;
     return JSON.parse(raw).gatewayId ?? null;
   } catch { return null; }
@@ -198,7 +210,7 @@ function scopedKey(base: string): string {
   return gid ? `${base}:${gid}` : base;
 }
 
-const STORAGE_KEY_BASE = "office-chat-history";
+const STORAGE_KEY_BASE = "piko-chat-history";
 
 interface PersistedAgent {
   agentId: string;
@@ -318,7 +330,7 @@ function removeFromStorage(_agentId: string) {
 
 // ── Team messages persistence ──
 
-const TEAM_STORAGE_KEY_BASE = "office-team-messages";
+const TEAM_STORAGE_KEY_BASE = "piko-team-messages";
 
 function saveTeamMessages(messages: TeamChatMessage[]) {
   if (!isBrowser()) return;
@@ -341,7 +353,7 @@ function loadTeamMessages(): TeamChatMessage[] {
 
 // ── Project persistence ──
 
-const PROJECT_STORAGE_KEY_BASE = "office-projects";
+const PROJECT_STORAGE_KEY_BASE = "piko-projects";
 
 function saveProjects(projects: Map<string, Project>) {
   if (!isBrowser()) return;
@@ -365,7 +377,7 @@ function loadProjects(): Map<string, Project> {
 
 // ── Team phase persistence ──
 
-const TEAM_PHASE_KEY_BASE = "office-team-phase";
+const TEAM_PHASE_KEY_BASE = "piko-team-phase";
 
 function saveTeamPhases(phases: Map<string, TeamPhaseState>) {
   if (!isBrowser()) return;
@@ -406,7 +418,22 @@ function defaultAgent(agentId: string, name = agentId, role = ""): AgentState {
   };
 }
 
+function restoreActiveTask(agent: AgentState, snapshot: WorkspaceSnapshot): AgentState {
+  if (agent.isExternal) return agent;
+  const task = activeWorkspaceTask(snapshot, agent.agentId);
+  if (!task) return agent;
+  const streamId = task.taskId + "-stream";
+  const messages = agent.messages.some(message => message.id === streamId) ? agent.messages : [
+    ...agent.messages,
+    { id: streamId, role: "agent" as const, text: "", timestamp: task.startedAt ?? task.createdAt },
+  ];
+  return { ...agent, currentTaskId: task.taskId, currentPrompt: task.prompt,
+    status: task.status === "waiting_approval" ? "waiting_approval" : "working", messages };
+}
+
 export const useOfficeStore = create<OfficeStore>((set, get) => ({
+  workspace: { revision: 0, tasks: [], highlights: [], links: [] },
+  workspaceLoaded: false,
   agents: new Map(),
   agentDefs: [],
   teamMessages: [],
@@ -422,7 +449,11 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
   pendingPreviewUrl: null,
   configResult: null,
   configData: null,
+  personaResult: null,
+  workroom: EMPTY_WORKROOM,
+  workroomResult: null,
   detectedBackends: [],
+  defaultBackend: "qwen",
   availableSkills: [],
   connected: false,
   hydrated: false,
@@ -434,7 +465,7 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
     if (url) set({ pendingPreviewUrl: null });
     return url;
   },
-  setConnected: (c) => set({ connected: c }),
+  setConnected: (c) => set(c ? { connected: c } : { connected: c, workspaceLoaded: false }),
   setRole: (role) => set({ role }),
 
   hydrate: () => {
@@ -443,9 +474,12 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
     const savedTeamMessages = loadTeamMessages();
     const savedTeamPhases = loadTeamPhases();
     const savedProjects = loadProjects();
-    const savedActiveProject = isBrowser()
-      ? (localStorage.getItem(scopedKey("office-active-project")) || null)
+    const storedActiveProject = isBrowser()
+      ? (localStorage.getItem(scopedKey("piko-active-project")) || null)
       : null;
+    const savedActiveProject = storedActiveProject && savedProjects.get(storedActiveProject)?.status === "active"
+      ? storedActiveProject
+      : [...savedProjects.values()].filter(p => p.status === "active").sort((a, b) => b.createdAt - a.createdAt)[0]?.id ?? null;
     if (saved.size === 0 && savedTeamMessages.length === 0 && savedTeamPhases.size === 0 && savedProjects.size === 0) { set({ hydrated: true, teamMessages: savedTeamMessages, teamPhases: savedTeamPhases, projects: savedProjects, activeProjectId: savedActiveProject }); return; }
     set((state) => {
       const agents = new Map(state.agents);
@@ -517,6 +551,7 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
       const projects = new Map(state.projects);
       projects.set(id, project);
       saveProjects(projects);
+      if (isBrowser()) localStorage.setItem(scopedKey("piko-active-project"), id);
       return { projects, activeProjectId: id };
     });
     return id;
@@ -525,7 +560,7 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
   setActiveProject: (projectId) => {
     set({ activeProjectId: projectId });
     if (isBrowser()) {
-      try { localStorage.setItem(scopedKey("office-active-project"), projectId ?? ""); } catch {}
+      try { localStorage.setItem(scopedKey("piko-active-project"), projectId ?? ""); } catch {}
     }
   },
 
@@ -600,6 +635,18 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
       const agents = new Map(state.agents);
 
       switch (event.type) {
+        case "WORKROOM_SYNC": {
+          if (state.workroom.revision > 0) {
+            const seen = new Set(state.workroom.conversations.flatMap(room => room.messages.filter(m => m.state !== "working").map(m => m.id)));
+            for (const room of event.snapshot.conversations) for (const message of room.messages) if (message.proactive && message.state !== "working" && !seen.has(message.id)) notifyTaskDone(event.snapshot.members.find(m => m.key === message.sender)?.name || "成员", message.text);
+          }
+          return { workroom: event.snapshot };
+        }
+        case "WORKROOM_RESULT": receiveWorkroomResult(event); return { workroomResult: event };
+        case "WORKSPACE_SYNC": {
+          for (const [id, agent] of agents) agents.set(id, restoreActiveTask(agent, event.snapshot));
+          return { agents, workspace: event.snapshot, workspaceLoaded: true };
+        }
         case "AGENTS_SYNC": {
           // Remove agents that no longer exist on the gateway (e.g. after restart)
           const validIds = new Set(event.agentIds);
@@ -660,6 +707,8 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
             }
             agents.set(event.agentId, agent);
           }
+          // PING sends the workspace snapshot before AGENT_CREATED on a fresh page.
+          agents.set(event.agentId, restoreActiveTask(agents.get(event.agentId)!, state.workspace));
           // Skip localStorage persistence for external agents and temporary reviewers
           if (!event.isExternal && !event.agentId.startsWith("reviewer-")) {
             // Debug: detect isTeamLead loss
@@ -942,7 +991,6 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
             updatedMessages[updatedMessages.length - 1] = {
               ...lastMsg,
               text: accumulated,
-              timestamp: Date.now(),
               _accumulatedText: accumulated,
             };
             agents.set(event.agentId, { ...agent, messages: updatedMessages });
@@ -1059,8 +1107,14 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
           });
           break;
         }
+        case "AGENT_DEF_SAVED": {
+          receiveAgentDefinitionResult(event); return {};
+        }
         case "AGENT_DEFS": {
           return { agents, agentDefs: event.agents };
+        }
+        case "AGENT_PERSONA": {
+          return { personaResult: event };
         }
         case "SKILL_LIST": {
           return { agents, availableSkills: event.skills };
@@ -1110,13 +1164,13 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
           return { agents };
         }
         case "BACKENDS_AVAILABLE": {
-          return { agents, detectedBackends: event.backends };
+          return { agents, detectedBackends: event.backends, defaultBackend: event.defaultBackend ?? event.backends[0] ?? "qwen" };
         }
         case "CONFIG_LOADED": {
-          return { agents, configData: { telegramBotToken: event.telegramBotToken, telegramAllowedUsers: event.telegramAllowedUsers, telegramConnected: event.telegramConnected, worktreeEnabled: event.worktreeEnabled, autoMergeEnabled: event.autoMergeEnabled, tunnelBaseUrl: event.tunnelBaseUrl, tunnelToken: event.tunnelToken, tunnelRunning: event.tunnelRunning } };
+          return { agents, configData: event };
         }
         case "CONFIG_SAVED": {
-          return { agents, configResult: { success: event.success, message: event.message, telegramConnected: event.telegramConnected, tunnelRunning: event.tunnelRunning } };
+          return { agents, configResult: event };
         }
         case "PROJECT_LIST": {
           return { agents, projectList: event.projects };
@@ -1166,7 +1220,9 @@ export const useOfficeStore = create<OfficeStore>((set, get) => ({
         }
       }
 
-      return { agents };
+      const projects = reconcileProjectMembers(state.projects, agents.values());
+      if (projects !== state.projects) saveProjects(projects);
+      return { agents, projects };
     });
   },
 }));

@@ -3,7 +3,7 @@
  * with a background image and custom furniture sprites.
  *
  * The grid is imported 1:1 — no downsampling. The tileEditor cellSize
- * matches open-office TILE_SIZE (16px), so tiles and furniture positions
+ * matches piko TILE_SIZE (16px), so tiles and furniture positions
  * are preserved exactly.
  */
 
@@ -135,7 +135,7 @@ function rotationToOrientation(rotation: number): string {
   }
 }
 
-/** Map tileEditor cell types to open-office TileType */
+/** Map tileEditor cell types to piko TileType */
 function mapTileType(cell: number): number {
   if (cell === 0) return TileType.WALL
   if (cell === 8) return TileType.VOID

@@ -3,6 +3,8 @@ name: Level Designer
 description: Spatial storytelling, layout theory, pacing architecture, and encounter design.
 ---
 
+[简体中文](zh-CN/level-designer.md)
+
 # Level Designer
 
 Every level is an authored experience. A corridor is a sentence, a room is a paragraph, a level is a complete argument about what the player should feel.

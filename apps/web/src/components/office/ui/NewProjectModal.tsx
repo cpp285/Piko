@@ -1,4 +1,6 @@
 "use client";
+import { tr, trNode, useLocale } from "@/lib/ui-language";
+
 
 import { useState, useCallback } from "react";
 import { nanoid } from "nanoid";
@@ -24,11 +26,13 @@ export default function NewProjectModal({
   onClose,
   onCreated,
 }: NewProjectModalProps) {
+  useLocale();
   const [name, setName] = useState("");
   const [directory, setDirectory] = useState("");
   const [mode, setMode] = useState<InitialMode>("solo");
 
   const createProject = useOfficeStore((s) => s.createProject);
+  const hasTeam = useOfficeStore(s => [...s.agents.values()].some(agent => !!agent.teamId));
 
   const handleBrowse = useCallback(() => {
     const rid = nanoid(6);
@@ -44,7 +48,7 @@ export default function NewProjectModal({
   }, [name]);
 
   const handleCreate = useCallback(() => {
-    if (!directory.trim()) return;
+    if (!directory.trim() || (mode === "team" && hasTeam)) return;
     const projectName = name.trim() || directory.split("/").filter(Boolean).pop() || "untitled";
     const projectId = createProject(projectName, directory.trim());
     onCreated(projectId, mode);
@@ -52,7 +56,7 @@ export default function NewProjectModal({
     setName("");
     setDirectory("");
     setMode("solo");
-  }, [name, directory, mode, createProject, onCreated]);
+  }, [name, directory, mode, hasTeam, createProject, onCreated]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -73,56 +77,55 @@ export default function NewProjectModal({
       >
         {/* Header */}
         <div className="tm-header">
-          <span>NEW PROJECT</span>
+          <span>{tr("NEW PROJECT")}</span>
           <button className="tm-close" onClick={onClose}>
-            ESC
-          </button>
+            {tr("ESC")}</button>
         </div>
 
         {/* Body */}
         <div className="tm-body" style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
           {/* Project Name */}
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
-            <label className="tsl">Name</label>
+            <label className="tsl">{tr("Name")}</label>
             <input
               className="ti"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="auto from folder name"
+              placeholder={tr("auto from folder name")}
               autoFocus
             />
           </div>
 
           {/* Directory */}
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
-            <label className="tsl">Directory</label>
+            <label className="tsl">{tr("Directory")}</label>
             <div style={{ display: "flex", gap: "var(--space-2)" }}>
               <input
                 className="ti"
                 style={{ flex: 1 }}
                 value={directory}
                 onChange={(e) => setDirectory(e.target.value)}
-                placeholder="/path/to/project"
+                placeholder={tr("/path/to/project")}
               />
               <button className="tb tb-ghost" onClick={handleBrowse}>
-                Browse
-              </button>
+                {tr("Browse")}</button>
             </div>
           </div>
 
           {/* Initial Agents Mode */}
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            <label className="tsl">Initial Agents</label>
+            <label className="tsl">{tr("Initial Agents")}</label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-2)" }}>
               {(
                 [
                   { key: "solo", label: "Solo Agent", desc: "Single agent" },
-                  { key: "team", label: "Team", desc: "Lead + Dev + Review" },
+                  { key: "team", label: "Team", desc: "Lead + Product + Design + Dev + Review" },
                   { key: "empty", label: "Empty", desc: "Add agents later" },
                 ] as const
               ).map((opt) => (
                 <button
                   key={opt.key}
+                  disabled={opt.key === "team" && hasTeam}
                   className={`tac${mode === opt.key ? " tac-selected" : ""}`}
                   onClick={() => setMode(opt.key)}
                   style={{ padding: "var(--space-3) var(--space-2)" }}
@@ -135,7 +138,7 @@ export default function NewProjectModal({
                       fontWeight: 600,
                     }}
                   >
-                    {opt.label}
+                    {trNode(opt.label)}
                   </span>
                   <span
                     style={{
@@ -146,11 +149,12 @@ export default function NewProjectModal({
                       marginTop: "var(--space-1)",
                     }}
                   >
-                    {opt.desc}
+                    {trNode(opt.desc)}
                   </span>
                 </button>
               ))}
             </div>
+            {hasTeam && <p className="tsl">{tr("This office already has a team. Use it or explicitly remove it before creating another.")}</p>}
           </div>
         </div>
 
@@ -159,10 +163,9 @@ export default function NewProjectModal({
           <button
             className="tb tb-primary"
             onClick={handleCreate}
-            disabled={!directory.trim()}
+            disabled={!directory.trim() || (mode === "team" && hasTeam)}
           >
-            CREATE PROJECT
-          </button>
+            {tr("CREATE PROJECT")}</button>
         </div>
       </div>
     </div>

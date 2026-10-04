@@ -8,6 +8,7 @@
 
 import { existsSync } from "fs";
 import path from "path";
+import { normalizePreviewCommand } from "@piko/shared";
 import { CONFIG } from "./config.js";
 import { resolveAgentPath } from "./resolve-path.js";
 
@@ -50,15 +51,16 @@ const EMPTY: PreviewResult = { previewUrl: undefined, previewPath: undefined };
  */
 export function resolvePreview(input: PreviewInput): PreviewResult {
   const { cwd, workspace } = input;
+  const previewCmd = normalizePreviewCommand(input.previewCmd);
 
   // 1. PREVIEW_CMD with port — don't auto-start server.
   //    Frontend has previewCmd/previewPort and will send SERVE_PREVIEW on user click.
-  if (input.previewCmd && input.previewPort) {
+  if (previewCmd && input.previewPort) {
     return EMPTY;
   }
 
   // 2. PREVIEW_CMD without port — desktop/CLI app, no auto-launch
-  if (input.previewCmd && !input.previewPort) {
+  if (previewCmd && !input.previewPort) {
     return EMPTY;
   }
 

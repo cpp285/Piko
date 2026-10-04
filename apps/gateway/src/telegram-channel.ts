@@ -1,8 +1,8 @@
 import TelegramBot from "node-telegram-bot-api";
 import { config } from "./config.js";
 import { nanoid } from "nanoid";
-import { DEFAULT_AGENT_DEFS, type AgentDefinition } from "@office/shared";
-import type { GatewayEvent, Command } from "@office/shared";
+import { DEFAULT_AGENT_DEFS, type AgentDefinition } from "@piko/shared";
+import type { GatewayEvent, Command } from "@piko/shared";
 import type { Channel, CommandMeta } from "./transport.js";
 
 // ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ export const telegramChannel: Channel = {
         }
         bot!.sendMessage(
           msg.chat.id,
-          `Welcome to Bit Office!\n\nAvailable agents:\n${lines.join("\n")}\n\nTap a command to start a conversation, then send messages directly.`,
+          `Welcome to Piko!\n\nAvailable agents:\n${lines.join("\n")}\n\nTap a command to start a conversation, then send messages directly.`,
         );
         return;
       }
@@ -388,7 +388,9 @@ export const telegramChannel: Channel = {
         const msgId = statusMessages.get(key);
 
         if (msgId) {
-          bot.editMessageText(text, { chat_id: chatId, message_id: msgId, ...opts }).catch(() => {
+          bot.editMessageText(text, { chat_id: chatId, message_id: msgId,
+            reply_markup: previewUrl ? { inline_keyboard: [[{ text: "Preview", url: previewUrl }]] } : undefined,
+          }).catch(() => {
             bot!.sendMessage(chatId, text, opts).catch(() => {});
           });
           statusMessages.delete(key);

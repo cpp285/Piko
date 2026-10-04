@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// @bit-office/memory — Intelligent memory layer for AI agents
+// @piko/memory — Intelligent memory layer for AI agents
 //
 // Four-layer memory model:
 //   L0: Ephemeral (conversation sliding window — managed by caller)
@@ -8,7 +8,7 @@
 //   L3: Shared    (cross-agent project knowledge — persisted)
 //
 // Usage:
-//   import { commitSession, getMemoryContext, getAgentL0 } from "@bit-office/memory";
+//   import { commitSession, getMemoryContext, getAgentL0 } from "@piko/memory";
 //
 //   // On task completion:
 //   const summary = commitSession({ agentId, stdout, changedFiles, tokens, ... });

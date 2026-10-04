@@ -1,9 +1,10 @@
+import { readRuntimeEnv } from "@piko/shared/node";
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { CommandSchema } from "@office/shared";
-import type { GatewayEvent, Command, UserRole } from "@office/shared";
+import { CommandSchema } from "@piko/shared";
+import type { GatewayEvent, Command, UserRole } from "@piko/shared";
 import { config } from "./config.js";
-import { previewServer } from "@bit-office/orchestrator";
+import { previewServer } from "@piko/orchestrator";
 import { networkInterfaces, homedir } from "os";
 import { readFile, stat } from "fs/promises";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
@@ -82,6 +83,12 @@ const MIME_TYPES: Record<string, string> = {
 
 export function setPairCode(code: string) {
   pairCode = code;
+}
+
+/** Personal conversations and resources are visible only to the local owner. */
+export function sendToOwners(event: GatewayEvent) {
+  const data = JSON.stringify(event);
+  for (const [ws, info] of clients) if (info.role === "owner" && ws.readyState === WebSocket.OPEN) ws.send(data);
 }
 
 /** Send an event to a specific client by clientId (unicast) */
@@ -408,7 +415,7 @@ export const wsChannel: Channel = {
 
       const tryListen = () => {
         const httpServer = createServer(requestHandler);
-        httpServer.listen(port, () => {
+        httpServer.listen({ port, host: readRuntimeEnv("DESKTOP") === "1" ? "127.0.0.1" : undefined }, () => {
           // When port=0, OS assigns a random port — read the actual value
           const actualPort = (httpServer.address() as any)?.port ?? port;
           port = actualPort;
@@ -529,7 +536,8 @@ export const wsChannel: Channel = {
 };
 
 async function serveStatic(req: IncomingMessage, res: ServerResponse) {
-  const url = decodeURIComponent(req.url?.split("?")[0] ?? "/");
+  const requestedUrl = decodeURIComponent(req.url?.split("?")[0] ?? "/");
+  const url = requestedUrl.length > 1 ? requestedUrl.replace(/\/+$/, "") : requestedUrl;
 
   const routeMap: Record<string, string> = {
     "/": "/index.html",

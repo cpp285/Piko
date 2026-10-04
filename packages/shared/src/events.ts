@@ -1,5 +1,14 @@
+import { WorkroomSyncEvent, WorkroomResultEvent } from "./workroom";
 import { z } from "zod";
+import { PersonaTargetSchema } from "./persona";
+
+export const AgentPersonaEvent = z.object({
+  type: z.literal("AGENT_PERSONA"), requestId: z.string(), target: PersonaTargetSchema,
+  success: z.boolean(), saved: z.boolean().optional(), message: z.string().optional(),
+  documents: z.object({ identity: z.string(), soul: z.string(), version: z.string() }).optional(),
+});
 import { AgentStatusEnum, RiskLevelEnum, TeamPhaseEnum } from "./types";
+import { WorkspaceSnapshotSchema } from "./workspace";
 
 export const AgentStatusEvent = z.object({
   type: z.literal("AGENT_STATUS"),
@@ -158,6 +167,10 @@ export const SuggestionEvent = z.object({
   timestamp: z.number(),
 });
 
+export const AgentDefSavedEvent = z.object({
+  type: z.literal("AGENT_DEF_SAVED"), requestId: z.string(), agentDefId: z.string(), success: z.boolean(), message: z.string().optional(),
+});
+
 export const AgentDefsEvent = z.object({
   type: z.literal("AGENT_DEFS"),
   agents: z.array(z.object({
@@ -274,10 +287,17 @@ export const AutoMergeUpdatedEvent = z.object({
 export const BackendsAvailableEvent = z.object({
   type: z.literal("BACKENDS_AVAILABLE"),
   backends: z.array(z.string()),
+  defaultBackend: z.string().optional(),
 });
 
 export const ConfigLoadedEvent = z.object({
   type: z.literal("CONFIG_LOADED"),
+  feishuEnabled: z.boolean().optional(),
+  feishuAppId: z.string().optional(),
+  feishuSecretConfigured: z.boolean().optional(),
+  feishuAllowedUsers: z.array(z.string()).optional(),
+  feishuConnected: z.boolean().optional(),
+  feishuError: z.string().optional(),
   telegramBotToken: z.string().optional(),
   telegramAllowedUsers: z.array(z.string()).optional(),
   telegramConnected: z.boolean().optional(),
@@ -290,6 +310,8 @@ export const ConfigLoadedEvent = z.object({
 
 export const ConfigSavedEvent = z.object({
   type: z.literal("CONFIG_SAVED"),
+  requestId: z.string().optional(),
+  feishuConnected: z.boolean().optional(),
   success: z.boolean(),
   message: z.string(),
   telegramConnected: z.boolean().optional(),
@@ -302,7 +324,14 @@ export const ChatHistoryLoadedEvent = z.object({
   data: z.string(),
 });
 
+export const WorkspaceSyncEvent = z.object({
+  type: z.literal("WORKSPACE_SYNC"),
+  snapshot: WorkspaceSnapshotSchema,
+});
+
 export const GatewayEventSchema = z.discriminatedUnion("type", [
+  WorkroomSyncEvent, WorkroomResultEvent,
+  WorkspaceSyncEvent,
   AgentsSyncEvent,
   AgentStatusEvent,
   TaskStartedEvent,
@@ -320,6 +349,7 @@ export const GatewayEventSchema = z.discriminatedUnion("type", [
   ToolActivityEvent,
   TeamPhaseEvent,
   AgentDefsEvent,
+  AgentDefSavedEvent,
   SuggestionEvent,
   ProjectListEvent,
   ProjectDataEvent,
@@ -334,6 +364,7 @@ export const GatewayEventSchema = z.discriminatedUnion("type", [
   WorktreeRevertedEvent,
   AutoMergeUpdatedEvent,
   SkillListEvent,
+  AgentPersonaEvent,
   ChatHistoryLoadedEvent,
 ]);
 

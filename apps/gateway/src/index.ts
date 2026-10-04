@@ -1,14 +1,18 @@
-import { registerChannel, initTransports, publishEvent, destroyTransports, reinitChannel, isChannelActive } from "./transport.js";
-import { wsChannel, setPairCode, sendToClient } from "./ws-server.js";
+import { WorkroomService } from "./workroom-service.js";
+import type { WorkroomMember } from "@piko/shared";
+import { readRuntimeEnv } from "@piko/shared/node";
+import { registerChannel, initTransports, publishEvent as publishTransportEvent, destroyTransports, reinitChannel, isChannelActive } from "./transport.js";
+import { wsChannel, setPairCode, sendToClient, sendToOwners } from "./ws-server.js";
+import { createFeishuChannel } from "./feishu-channel.js";
 import { ablyChannel } from "./ably-client.js";
 import { telegramChannel, setTelegramAgentDefs, syncTelegramHiredAgents } from "./telegram-channel.js";
 import { config, CONFIG_DIR, hasSetupRun, reloadConfig, saveConfig } from "./config.js";
 import { runSetup } from "./setup.js";
 import { detectBackends, getBackend, getAllBackends } from "./backends.js";
-import { createOrchestrator, getMergeHistory, previewServer, recordProjectRatings, parseAgentOutput, setSessionDir, setStorageRoot, syncAgentDefs, type Orchestrator, type OrchestratorEvent, type RuntimeOwnerInfo, type TeamPhaseChangedEvent } from "@bit-office/orchestrator";
-import type { Command, GatewayEvent, UserRole } from "@office/shared";
+import { createOrchestrator, getMergeHistory, previewServer, recordProjectRatings, parseAgentOutput, setSessionDir, setStorageRoot, syncAgentDefs, type Orchestrator, type OrchestratorEvent, type RuntimeOwnerInfo, type TeamPhaseChangedEvent } from "@piko/orchestrator";
+import type { Command, GatewayEvent, UserRole } from "@piko/shared";
 import type { CommandMeta } from "./transport.js";
-import { DEFAULT_AGENT_DEFS, type AgentDefinition } from "@office/shared";
+import { DEFAULT_AGENT_DEFS, CHARACTER_COUNT, normalizeSkillName, isSafeSkillName, normalizePreviewCommand, type AgentDefinition } from "@piko/shared";
 import { nanoid } from "nanoid";
 import { exec, execFile, execFileSync, execSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, renameSync, unlinkSync, rmdirSync } from "fs";
@@ -20,13 +24,44 @@ import { installFileLogger } from "./file-logger.js";
 import { startTunnel, stopTunnel, isTunnelRunning } from "./tunnel.js";
 import { loadTeamState, saveTeamState, clearTeamState, type TeamState, type PersistedAgent, bufferEvent, archiveProject, resetProjectBuffer, setProjectName, listProjects, loadProject, loadProjectBuffer, rateProject } from "./team-state.js";
 import { clearRuntimeState, killPreviousInstances, registerRuntimeState } from "./runtime-state.js";
+import { isPlanApproval } from "./plan-approval.js";
+import { PersonaStore } from "./persona-store.js";
+import { createDefaultPersona, formatPersonaPrompt, mergeAgentDefinitions, type PersonaSubject, type PersonaTarget } from "@piko/shared";
 
 // Register all channels — each one self-activates if configured
+const feishuChannel = createFeishuChannel(() => orc.getAllAgents().map(a => ({
+  id: a.agentId, name: a.name, role: a.role, status: a.status,
+})));
 registerChannel(wsChannel);
+registerChannel(feishuChannel);
 registerChannel(ablyChannel);
 registerChannel(telegramChannel);
 
+import { WorkspaceLedger, type WorkspaceAgent } from "./workspace-ledger.js";
+
+let configSaveQueue: Promise<void> = Promise.resolve();
+
+let workspaceLedger: WorkspaceLedger | null = null;
+
+function resolveWorkspaceAgent(id: string): WorkspaceAgent {
+  const agent = orc?.getAgent(id);
+  return { name: agent?.name ?? id, role: agent?.role ?? "", teamId: agent?.teamId,
+    projectDir: (agent?.teamId ? orc.getTeamProjectDir() : null) ?? agentWorkDirs.get(id) ?? config.defaultWorkspace };
+}
+
+function publishEvent(event: GatewayEvent) {
+  publishTransportEvent(event);
+  try {
+    if (workspaceLedger?.apply(event, resolveWorkspaceAgent)) {
+      publishTransportEvent({ type: "WORKSPACE_SYNC", snapshot: workspaceLedger.snapshot() });
+    }
+  } catch (error) {
+    console.error("[Workspace] Failed to save history:", error);
+  }
+}
+
 let orc: Orchestrator;
+let workroom: WorkroomService | null = null;
 let scanner: ProcessScanner | null = null;
 let outputReader: ExternalOutputReader | null = null;
 let runtimeState: RuntimeOwnerInfo | null = null;
@@ -80,10 +115,10 @@ function showPairCode() {
   setPairCode(code);
   console.log("");
   console.log("╔══════════════════════════════════╗");
-  console.log("║     PAIR CODE: " + code + "           ║");
+  console.log("║     配对码: " + code + "           ║");
   console.log("╚══════════════════════════════════╝");
   console.log("");
-  console.log(`Open your phone → enter gateway address + code`);
+  console.log(`手机浏览器打开网关地址，输入配对码连接`);
   console.log("");
 }
 
@@ -162,10 +197,63 @@ function createUniqueProjectDir(workspace: string, baseName: string): string {
   return fullPath;
 }
 
+/** Shared by the approve button and an explicit approval in the owner's chat. */
+function approveAndExecutePlan(agentId: string, taskId: string, prompt: string): boolean {
+  // Validate before touching the filesystem; repeat approvals must not create new projects.
+  if (!orc.isTeamLead(agentId) || orc.getTeamPhase(agentId) !== "design") return false;
+  const approvedPlan = orc.getOriginalTask(agentId) || orc.getLeaderLastOutput(agentId);
+  if (!approvedPlan) return false;
+  const projectName = extractProjectName(approvedPlan);
+  setProjectName(projectName);
+  const workspace = teamWorkDir || config.defaultWorkspace;
+  const projectDir = orc.getTeamProjectDir() || createUniqueProjectDir(workspace, projectName);
+  if (!existsSync(path.join(projectDir, ".git"))) {
+    try {
+      execFileSync("git", ["init"], { cwd: projectDir, stdio: "pipe" });
+      execFileSync("git", ["-c", "user.name=Piko", "-c", "user.email=bot@piko.local", "commit", "--allow-empty", "-m", "init"], { cwd: projectDir, stdio: "pipe" });
+    } catch (err) {
+      console.error(`[Gateway] Failed to init git: ${(err as Error).message}`);
+    }
+  }
+  orc.setTeamProjectDir(projectDir);
+  if (!orc.approvePlan(agentId)) return false;
+  workspaceLedger?.prepare(taskId, agentId, prompt, { ...resolveWorkspaceAgent(agentId), projectDir });
+  if (workspaceLedger) publishTransportEvent({ type: "WORKSPACE_SYNC", snapshot: workspaceLedger.snapshot() });
+  orc.runTask(agentId, taskId, `${prompt}\n\nThe user approved the plan. Execute it now: delegate to the appropriate real members in the current team roster using @Name: task. Use the product → design → development → review workflow when those roles are present. Adapt any placeholder roles in the plan to the available members. All work belongs in the system-managed project directory: ${projectDir}`, { repoPath: projectDir, phaseOverride: "execute" });
+  return true;
+}
+
 const AGENTS_FILE = path.join(CONFIG_DIR, "data", "agents.json");
 const SKILLS_DIR = path.join(CONFIG_DIR, "skills");
+const personaStore = new PersonaStore({
+  definition: path.join(CONFIG_DIR, "data", "personas"),
+  agent: path.join(config.instanceDir, "personas"),
+});
 
-/** Scan ~/.open-office[-dev]/skills/ and return metadata for each skill */
+function readAgentPersona(subject: PersonaSubject & { agentId: string; agentDefId?: string }) {
+  return personaStore.read({ kind: "agent", id: subject.agentId }, subject, () => {
+    const roleName = subject.role.split(/\s*[—–]\s*/)[0].trim();
+    const def = subject.agentDefId ? agentDefs.find(d => d.id === subject.agentDefId)
+      : agentDefs.find(d => d.role === roleName && d.name === subject.name) ?? agentDefs.find(d => d.role === roleName);
+    if (!def) return createDefaultPersona(subject);
+    const seed = personaStore.read({ kind: "definition", id: def.id }, def);
+    // A hired copy has its own name and its own documents from this point onward.
+    return { identity: seed.identity.replaceAll(def.name, subject.name), soul: seed.soul.replaceAll(def.name, subject.name) };
+  });
+}
+
+function personaSubject(target: PersonaTarget): PersonaSubject {
+  const subject = target.kind === "definition" ? agentDefs.find(d => d.id === target.id) : orc.getAgent(target.id);
+  if (!subject) {
+    const retained = workroom?.findMember(target);
+    if (retained) return retained;
+    throw new Error("找不到这个人物，请重新打开身份设置。");
+  }
+  if (target.kind === "agent") readAgentPersona(subject as PersonaSubject & { agentId: string });
+  return subject;
+}
+
+/** Scan ~/.piko[-dev]/skills/ and return metadata for each skill */
 function listSkills(): Array<{ name: string; title: string; isFolder: boolean }> {
   if (!existsSync(SKILLS_DIR)) return [];
   try {
@@ -195,6 +283,7 @@ function listSkills(): Array<{ name: string; title: string; isFolder: boolean }>
 
 /** Get the absolute entry path for a skill by name */
 function getSkillEntryPath(skillName: string): string | null {
+  if (!isSafeSkillName(skillName)) return null;
   const folderPath = path.join(SKILLS_DIR, skillName, "skill.md");
   const filePath = path.join(SKILLS_DIR, `${skillName}.md`);
   if (existsSync(folderPath)) return folderPath;
@@ -234,10 +323,7 @@ function loadAgentDefs(): AgentDefinition[] {
         const saved = (raw.agents as unknown[])
           .map(normalizeAgentDef)
           .filter((a): a is AgentDefinition => a !== null);
-        // Keep only custom (non-builtin) agents from the saved file
-        const custom = saved.filter(a => !a.isBuiltin);
-        // Rebuild: fresh builtins (in DEFAULT order) + custom agents appended
-        const merged = [...DEFAULT_AGENT_DEFS, ...custom];
+        const merged = mergeAgentDefinitions(saved);
         saveAgentDefs(merged);
         return merged;
       }
@@ -250,14 +336,10 @@ function loadAgentDefs(): AgentDefinition[] {
 }
 
 function saveAgentDefs(agents: AgentDefinition[]): void {
-  try {
-    const dir = path.dirname(AGENTS_FILE);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(AGENTS_FILE, JSON.stringify({ agents }, null, 2), "utf-8");
-    console.log(`[Gateway] Saved ${agents.length} agent definitions to ${AGENTS_FILE}`);
-  } catch (e) {
-    console.log(`[Gateway] Failed to save agents.json: ${e}`);
-  }
+  mkdirSync(path.dirname(AGENTS_FILE), { recursive: true });
+  const staged = AGENTS_FILE + ".tmp";
+  writeFileSync(staged, JSON.stringify({ agents }, null, 2), { encoding: "utf8", mode: 0o600 });
+  renameSync(staged, AGENTS_FILE);
 }
 
 let agentDefs: AgentDefinition[] = [];
@@ -323,8 +405,10 @@ function mapOrchestratorEvent(e: OrchestratorEvent): GatewayEvent | null {
     case "task:started":
       return { type: "TASK_STARTED", agentId: e.agentId, taskId: e.taskId, prompt: e.prompt };
     case "task:done":
+      workroom?.report(`agent:${e.agentId}`, "团队工作", e.result.summary, true);
       return { type: "TASK_DONE", agentId: e.agentId, taskId: e.taskId, result: e.result, isFinalResult: e.isFinalResult };
     case "task:failed":
+      workroom?.report(`agent:${e.agentId}`, "团队工作", e.error, false);
       return { type: "TASK_FAILED", agentId: e.agentId, taskId: e.taskId, error: e.error };
     case "task:delegated":
       return { type: "TASK_DELEGATED", fromAgentId: e.fromAgentId, toAgentId: e.toAgentId, taskId: e.taskId, prompt: e.prompt };
@@ -371,12 +455,14 @@ function mapOrchestratorEvent(e: OrchestratorEvent): GatewayEvent | null {
       return null;
     case "worktree:created":
       console.log(`[Worktree] Created ${e.worktreePath} for agent ${e.agentId}`);
+      persistTeamState();
       return null;
     case "worktree:merged":
       console.log(`[Worktree] Squash-merged branch ${e.branch} for agent ${e.agentId} (success=${e.success}${e.conflictFiles?.length ? ` conflicts=${e.conflictFiles.join(",")}` : ""}${e.stagedFiles?.length ? ` staged=${e.stagedFiles.length} files` : ""})`);
       return { type: "WORKTREE_MERGED", agentId: e.agentId, branch: e.branch, success: e.success, commitHash: e.commitHash, commitMessage: e.commitMessage, undoCount: orc.getAllAgents().find(a => a.agentId === e.agentId)?.undoCount ?? 0 };
     case "worktree:ready":
       console.log(`[Worktree] Branch ${e.branch} ready for manual merge (agent ${e.agentId})`);
+      persistTeamState();
       return { type: "WORKTREE_READY", agentId: e.agentId, taskId: e.taskId, branch: e.branch };
     case "autoMerge:updated":
       return { type: "AUTO_MERGE_UPDATED", agentId: e.agentId, autoMerge: e.autoMerge };
@@ -394,8 +480,8 @@ function mapOrchestratorEvent(e: OrchestratorEvent): GatewayEvent | null {
 
 const ALLOWED: Record<UserRole, Set<string>> = {
   owner: new Set(["*"]),
-  collaborator: new Set(["PING", "SUGGEST", "LIST_PROJECTS", "LOAD_PROJECT"]),
-  spectator: new Set(["PING", "LIST_PROJECTS", "LOAD_PROJECT"]),
+  collaborator: new Set(["PING", "SUGGEST", "LIST_PROJECTS", "LOAD_PROJECT", "GET_WORKSPACE"]),
+  spectator: new Set(["PING", "LIST_PROJECTS", "LOAD_PROJECT", "GET_WORKSPACE"]),
 };
 
 // Per-agent custom working directories (set via CREATE_AGENT or CREATE_TEAM workDir)
@@ -421,9 +507,38 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
     return;
   }
 
-  console.log("[Gateway] Received command:", parsed.type, JSON.stringify(parsed));
+  console.log("[Gateway] Received command:", parsed.type, (parsed.type === "SAVE_AGENT_PERSONA" || parsed.type === "WORKROOM" || parsed.type === "SAVE_AGENT_DEF") ? "[persona content omitted]" : JSON.stringify(parsed));
 
   switch (parsed.type) {
+    case "WORKROOM": {
+      try {
+        if (!workroom) throw new Error("会话服务尚未就绪。");
+        const result = workroom.handle(parsed.action);
+        sendToClient(meta.clientId, { type: "WORKROOM_SYNC", snapshot: workroom.snapshot() });
+        sendToClient(meta.clientId, { type: "WORKROOM_RESULT", requestId: parsed.requestId, success: true, ...result });
+      } catch (error) {
+        sendToClient(meta.clientId, { type: "WORKROOM_RESULT", requestId: parsed.requestId, success: false, message: error instanceof Error ? error.message : "操作失败，请重试。" });
+      }
+      break;
+    }
+    case "GET_AGENT_PERSONA":
+    case "SAVE_AGENT_PERSONA": {
+      try {
+        const subject = personaSubject(parsed.target);
+        const documents = parsed.type === "SAVE_AGENT_PERSONA"
+          ? personaStore.save(parsed.target, subject, parsed, parsed.expectedVersion)
+          : personaStore.read(parsed.target, subject);
+        sendToClient(meta.clientId, { type: "AGENT_PERSONA", requestId: parsed.requestId, target: parsed.target, success: true, saved: parsed.type === "SAVE_AGENT_PERSONA", documents });
+      } catch (error) {
+        const message = error instanceof Error && /身份|文件|人物|草稿/.test(error.message) ? error.message : "身份文件读写失败，草稿已保留。请检查目录权限后重试。";
+        sendToClient(meta.clientId, { type: "AGENT_PERSONA", requestId: parsed.requestId, target: parsed.target, success: false, message });
+      }
+      break;
+    }
+    case "GET_WORKSPACE": {
+      if (workspaceLedger) publishTransportEvent({ type: "WORKSPACE_SYNC", snapshot: workspaceLedger.snapshot() });
+      break;
+    }
     case "CREATE_AGENT": {
       const backendId = parsed.backend ?? config.defaultBackend;
       const workDir = parsed.workDir || undefined;
@@ -457,6 +572,7 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
       }
       orc.createAgent({
         agentId: parsed.agentId,
+        agentDefId: parsed.agentDefId,
         name: parsed.name,
         role: parsed.role,
         personality,
@@ -489,6 +605,8 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
       {
         console.log(`[Gateway] RUN_TASK: agent=${parsed.agentId}, isLead=${orc.isTeamLead(parsed.agentId)}, hasTeam=${orc.getAllAgents().length > 1}`);
 
+        if (isPlanApproval(parsed.prompt) && approveAndExecutePlan(parsed.agentId, parsed.taskId, parsed.prompt)) break;
+
         // Phase override from orchestrator's PhaseMachine (handles complete→execute automatically)
         const phaseOverride = orc.getPhaseOverrideForLeader(parsed.agentId);
         // Inject audience suggestions into leader prompt
@@ -500,6 +618,11 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
           suggestions.length = 0; // consumed
         }
         const effectiveRepoPath = parsed.repoPath || agentWorkDirs.get(parsed.agentId);
+        workspaceLedger?.prepare(parsed.taskId, parsed.agentId, parsed.prompt, {
+          ...resolveWorkspaceAgent(parsed.agentId),
+          projectDir: effectiveRepoPath ?? resolveWorkspaceAgent(parsed.agentId).projectDir,
+        });
+        if (workspaceLedger) publishTransportEvent({ type: "WORKSPACE_SYNC", snapshot: workspaceLedger.snapshot() });
         orc.runTask(parsed.agentId, parsed.taskId, finalPrompt, { repoPath: effectiveRepoPath, phaseOverride });
       }
       break;
@@ -514,7 +637,7 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
     }
     case "SERVE_PREVIEW": {
       // Strip markdown formatting that leaders copy from dev output (e.g. "** `npx vite`" → "npx vite")
-      const cleanCmd = parsed.previewCmd?.replace(/\*\*/g, "").replace(/`/g, "").replace(/^_+|_+$/g, "").trim();
+      const cleanCmd = normalizePreviewCommand(parsed.previewCmd);
       const cleanPath = parsed.filePath?.replace(/\*\*/g, "").replace(/`/g, "").replace(/^_+|_+$/g, "").trim();
       // Guard: reject placeholder values that agents hallucinate
       const cmdLooksValid = cleanCmd && !/^[\[(].*[\])]$/.test(cleanCmd) && !/^none$/i.test(cleanCmd);
@@ -590,29 +713,28 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
       break;
     }
     case "CREATE_TEAM": {
+      const existingTeam = orc.getAllAgents().find(agent => agent.teamId);
+      if (existingTeam) {
+        publishEvent({ type: "TEAM_CHAT", fromAgentId: existingTeam.agentId, messageType: "warning",
+          message: "当前办公室已有团队。请继续使用现有团队，或先明确移除后再创建；原有成员和任务已保留。", timestamp: Date.now() });
+        break;
+      }
       const { leadId, memberIds, backends } = parsed;
-      const allIds = [leadId, ...memberIds.filter(id => id !== leadId)];
+      const allIds = [...new Set([leadId, ...memberIds.filter(id => id !== leadId)])];
+      if (agentDefs.find(def => def.id === leadId)?.teamRole !== "leader" || allIds.some(id => !agentDefs.some(def => def.id === id))) {
+        publishEvent({ type: "TEAM_CHAT", fromAgentId: leadId, messageType: "warning", message: "团队成员配置已变化，请重新选择后创建。", timestamp: Date.now() });
+        break;
+      }
       console.log(`[Gateway] Creating team: lead=${leadId}, members=${memberIds.join(",")}${parsed.workDir ? ` workDir=${parsed.workDir}` : ""}`);
 
       // Store team-level working directory override
       teamWorkDir = parsed.workDir || undefined;
 
-      // Clean up stale team agents from a previous team (no longer valid)
-      // Keep solo agents intact — they are independent
-      const newTeamDefNames = new Set(allIds.map(id => agentDefs.find(a => a.id === id)?.name).filter(Boolean));
-      for (const agent of orc.getAllAgents()) {
-        if (agent.teamId && !agent.isTeamLead) {
-          // Remove old team members (will be re-created below)
-          console.log(`[Gateway] Removing old team agent "${agent.name}" before team creation`);
-          orc.removeAgent(agent.agentId);
-        }
-      }
-
       let leadAgentId: string | null = null;
       const teamId = `team-${nanoid(6)}`;
 
       // Auto-name pool for team members without short names
-      const autoNames = ["Alex", "Mia", "Leo", "Nova", "Luna", "Rex", "Kai", "Zoe", "Jay", "Sam"];
+      const autoNames = DEFAULT_AGENT_DEFS.map(def => def.name);
       const usedNames = new Set<string>();
 
       for (const defId of allIds) {
@@ -634,15 +756,20 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
         }
         usedNames.add(agentName.toLowerCase());
 
+        if (teamWorkDir) agentWorkDirs.set(agentId, teamWorkDir);
         orc.createAgent({
           agentId,
+          agentDefId: def.id,
           name: agentName,
           role: def.skills ? `${def.role} — ${def.skills}` : def.role,
           personality: def.personality,
           backend: backendId,
+          model: config.defaultModels[backendId],
           palette: def.palette,
           teamId,
+          workDir: teamWorkDir,
         });
+        orc.setAgentAutoMerge(agentId, config.autoMergeEnabled ?? true);
       }
 
       if (leadAgentId) {
@@ -650,7 +777,7 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
         const teamChatEvt = {
           type: "TEAM_CHAT" as const,
           fromAgentId: leadAgentId,
-          message: `Team created! ${leadDef?.name ?? "Lead"} is the Team Lead with ${memberIds.length} team members.`,
+          message: `Team created! ${leadDef?.name ?? "Lead"} is the Team Lead with ${allIds.length - 1} team members.`,
           messageType: "status" as const,
           timestamp: Date.now(),
         };
@@ -704,29 +831,7 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
       break;
     }
     case "APPROVE_PLAN": {
-      const agentId = parsed.agentId;
-      console.log(`[Gateway] APPROVE_PLAN: agent=${agentId}${teamWorkDir ? ` teamWorkDir=${teamWorkDir}` : ""}`);
-      // Create a unique project directory for this team
-      const approvedPlan = orc.getLeaderLastOutput(agentId);
-      const projectName = extractProjectName(approvedPlan ?? "project");
-      setProjectName(projectName);
-      const workspace = teamWorkDir || config.defaultWorkspace;
-      const projectDir = createUniqueProjectDir(workspace, projectName);
-      // Initialize git repo so worktrees can be created for each dev agent
-      try {
-        execSync("git init", { cwd: projectDir, stdio: "pipe" });
-        execSync("git -c user.name=OpenOffice -c user.email=bot@openoffice.local commit --allow-empty -m 'init'", { cwd: projectDir, stdio: "pipe" });
-        console.log(`[Gateway] Initialized git repo in ${projectDir}`);
-      } catch (err) {
-        console.error(`[Gateway] Failed to init git: ${(err as Error).message}`);
-      }
-      orc.setTeamProjectDir(projectDir);
-      // Transition design → execute (orchestrator handles plan capture + phase event)
-      const phaseResult = orc.approvePlan(agentId);
-      if (phaseResult) {
-        const taskId = nanoid();
-        orc.runTask(agentId, taskId, `The user approved your plan. Execute it now by delegating tasks to your team members. All work must go in the project directory: ${path.basename(projectDir)}/`, { phaseOverride: "execute" });
-      }
+      approveAndExecutePlan(parsed.agentId, nanoid(), "批准方案并开始执行");
       break;
     }
     case "END_PROJECT": {
@@ -767,6 +872,8 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
       break;
     }
     case "PING": {
+      if (workroom && meta.role === "owner") sendToClient(meta.clientId, { type: "WORKROOM_SYNC", snapshot: workroom.snapshot() });
+      if (workspaceLedger) publishTransportEvent({ type: "WORKSPACE_SYNC", snapshot: workspaceLedger.snapshot() });
       console.log("[Gateway] Received PING, broadcasting agent statuses");
       // Re-sync Telegram commands with current agent list (catches any drift)
       syncHiredAgentsToTelegram();
@@ -822,7 +929,7 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
           name: ext.name,
           role: ext.cwd ? ext.cwd.split("/").pop() ?? ext.backendId : ext.backendId,
           isExternal: true,
-          palette: ext.pid % 6,
+          palette: ext.pid % CHARACTER_COUNT,
           pid: ext.pid,
           cwd: ext.cwd ?? undefined,
           startedAt: ext.startedAt,
@@ -835,27 +942,29 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
         });
       }
       publishEvent({ type: "AGENT_DEFS", agents: agentDefs });
-      publishEvent({ type: "BACKENDS_AVAILABLE", backends: config.detectedBackends });
+      publishEvent({ type: "BACKENDS_AVAILABLE", backends: config.detectedBackends, defaultBackend: config.defaultBackend });
       publishEvent({ type: "SKILL_LIST", skills: listSkills() });
       break;
     }
     case "SAVE_AGENT_DEF": {
-      const def = parsed.agent as AgentDefinition;
-      const idx = agentDefs.findIndex(a => a.id === def.id);
-      if (idx >= 0) {
-        if (agentDefs[idx].isBuiltin) {
-          def.isBuiltin = true;
-          def.teamRole = agentDefs[idx].teamRole;
-        }
-        agentDefs[idx] = def;
-      } else {
-        def.isBuiltin = false;
-        def.teamRole = "dev";
-        agentDefs.push(def);
+      try {
+        const def = { ...parsed.agent } as AgentDefinition;
+        const idx = agentDefs.findIndex(a => a.id === def.id);
+        if (idx >= 0 && agentDefs[idx].isBuiltin) {
+          def.isBuiltin = true; def.teamRole = agentDefs[idx].teamRole;
+        } else if (idx < 0) { def.isBuiltin = false; def.teamRole = "dev"; }
+        // Create real files before announcing success; retries never overwrite existing edits.
+        personaStore.read({ kind: "definition", id: def.id }, def, idx < 0 ? parsed.initialPersona : undefined);
+        const next = [...agentDefs]; if (idx >= 0) next[idx] = def; else next.push(def);
+        saveAgentDefs(next); agentDefs = next;
+        setTelegramAgentDefs(agentDefs);
+        publishEvent({ type: "AGENT_DEFS", agents: agentDefs });
+        if (workroom) sendToOwners({ type: "WORKROOM_SYNC", snapshot: workroom.snapshot() });
+        if (parsed.requestId) sendToClient(meta.clientId, { type: "AGENT_DEF_SAVED", requestId: parsed.requestId, agentDefId: def.id, success: true });
+      } catch (error) {
+        if (parsed.requestId) sendToClient(meta.clientId, { type: "AGENT_DEF_SAVED", requestId: parsed.requestId, agentDefId: parsed.agent.id, success: false, message: error instanceof Error ? error.message : "人物保存失败，请重试。" });
+        else console.error("[Gateway] Could not save agent definition", error);
       }
-      saveAgentDefs(agentDefs);
-      setTelegramAgentDefs(agentDefs);
-      publishEvent({ type: "AGENT_DEFS", agents: agentDefs });
       break;
     }
     case "DELETE_AGENT_DEF": {
@@ -876,7 +985,7 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
       break;
     }
     case "SAVE_SKILL": {
-      const skillName = parsed.name.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
+      const skillName = normalizeSkillName(parsed.name);
       if (!skillName) break;
       const skillDir = path.join(SKILLS_DIR, skillName);
       if (!existsSync(skillDir)) mkdirSync(skillDir, { recursive: true });
@@ -887,6 +996,7 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
     }
     case "DELETE_SKILL": {
       const skillName = parsed.name;
+      if (!isSafeSkillName(skillName)) break;
       const folderPath = path.join(SKILLS_DIR, skillName);
       const filePath = path.join(SKILLS_DIR, `${skillName}.md`);
       try {
@@ -982,6 +1092,12 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
       const tgConnected = isChannelActive(telegramChannel);
       sendToClient(meta.clientId, {
         type: "CONFIG_LOADED",
+        feishuEnabled: config.feishuEnabled,
+        feishuAppId: config.feishuAppId,
+        feishuSecretConfigured: !!config.feishuAppSecret,
+        feishuAllowedUsers: config.feishuAllowedUsers,
+        feishuConnected: feishuChannel.status().connected,
+        feishuError: feishuChannel.status().error,
         telegramBotToken: config.telegramBotToken ? config.telegramBotToken.slice(0, 6) + "..." : undefined,
         telegramAllowedUsers: config.telegramAllowedUsers,
         telegramConnected: tgConnected,
@@ -994,65 +1110,71 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
       break;
     }
     case "SAVE_CONFIG": {
-      try {
-        const updates: Record<string, unknown> = {};
-        if (parsed.telegramBotToken !== undefined) updates.telegramBotToken = parsed.telegramBotToken || undefined;
-        if (parsed.telegramAllowedUsers !== undefined) updates.telegramAllowedUsers = parsed.telegramAllowedUsers;
-        if (parsed.worktreeEnabled !== undefined) {
-          updates.worktreeEnabled = parsed.worktreeEnabled;
-          orc.setWorktreeEnabled(parsed.worktreeEnabled);
-        }
-        if (parsed.autoMergeEnabled !== undefined) {
-          updates.autoMergeEnabled = parsed.autoMergeEnabled;
-          config.autoMergeEnabled = parsed.autoMergeEnabled;
-          // Apply to all existing agents
-          for (const agent of orc.getAllAgents()) {
-            orc.setAgentAutoMerge(agent.agentId, parsed.autoMergeEnabled);
+      configSaveQueue = configSaveQueue.then(async () => {
+        try {
+          const updates: Record<string, unknown> = {};
+          const feishuChanged = parsed.feishuEnabled !== undefined || parsed.feishuAppId !== undefined || parsed.feishuAppSecret !== undefined || parsed.feishuAllowedUsers !== undefined;
+          if (parsed.feishuEnabled !== undefined) updates.feishuEnabled = parsed.feishuEnabled;
+          if (parsed.feishuAppId !== undefined) updates.feishuAppId = parsed.feishuAppId;
+          if (parsed.feishuAppSecret !== undefined) updates.feishuAppSecret = parsed.feishuAppSecret;
+          if (parsed.feishuAllowedUsers !== undefined) updates.feishuAllowedUsers = parsed.feishuAllowedUsers;
+          if (feishuChanged && (parsed.feishuEnabled ?? config.feishuEnabled)) {
+            const appId = parsed.feishuAppId ?? config.feishuAppId;
+            const secret = parsed.feishuAppSecret ?? config.feishuAppSecret;
+            if (!/^cli_[0-9a-fA-F]{16}$/.test(appId) || !secret) throw new Error("启用飞书前，请填写有效的 App ID 和 App Secret。");
           }
-          persistTeamState(); // Persist per-agent autoMerge so it survives gateway restart
-        }
-        if (parsed.tunnelBaseUrl !== undefined) updates.tunnelBaseUrl = parsed.tunnelBaseUrl || undefined;
-        if (parsed.tunnelToken !== undefined) updates.tunnelToken = parsed.tunnelToken || undefined;
-        // Clear legacy field to prevent fallback reconnection
-        updates.telegramBotTokens = undefined;
-        saveConfig(updates);
-        reloadConfig();
+          if (parsed.telegramBotToken !== undefined) updates.telegramBotToken = parsed.telegramBotToken || undefined;
+          if (parsed.telegramAllowedUsers !== undefined) updates.telegramAllowedUsers = parsed.telegramAllowedUsers;
+          if (parsed.worktreeEnabled !== undefined) {
+            updates.worktreeEnabled = parsed.worktreeEnabled;
+            orc.setWorktreeEnabled(parsed.worktreeEnabled);
+          }
+          if (parsed.autoMergeEnabled !== undefined) {
+            updates.autoMergeEnabled = parsed.autoMergeEnabled;
+            config.autoMergeEnabled = parsed.autoMergeEnabled;
+            // Apply to all existing agents
+            for (const agent of orc.getAllAgents()) {
+              orc.setAgentAutoMerge(agent.agentId, parsed.autoMergeEnabled);
+            }
+            persistTeamState(); // Persist per-agent autoMerge so it survives gateway restart
+          }
+          if (parsed.tunnelBaseUrl !== undefined) updates.tunnelBaseUrl = parsed.tunnelBaseUrl || undefined;
+          if (parsed.tunnelToken !== undefined) updates.tunnelToken = parsed.tunnelToken || undefined;
+          // Clear legacy field to prevent fallback reconnection
+          if (parsed.telegramBotToken !== undefined) updates.telegramBotTokens = undefined;
+          saveConfig(updates);
+          reloadConfig();
 
-        // Start or stop tunnel based on new config
-        if (config.tunnelToken) {
-          if (!isTunnelRunning()) startTunnel();
-        } else {
-          stopTunnel();
-        }
+          // Reconfigure only the connection explicitly changed by this request.
+          if (parsed.tunnelToken !== undefined || parsed.tunnelBaseUrl !== undefined) {
+            stopTunnel();
+            if (config.tunnelToken) startTunnel();
+          }
 
-        // Restart Telegram channel with new config
-        const cid = meta.clientId;
-        const tunnelUp = isTunnelRunning();
-        reinitChannel(telegramChannel).then((tgOk) => {
-          console.log(`[Gateway] Config saved. Telegram: ${tgOk ? "connected" : "not configured"}, Tunnel: ${tunnelUp ? "running" : "off"}`);
+          const cid = meta.clientId;
+          const tgChanged = parsed.telegramBotToken !== undefined || parsed.telegramAllowedUsers !== undefined;
+          if (tgChanged) await reinitChannel(telegramChannel);
+          const feishuOk = feishuChanged ? await reinitChannel(feishuChannel) : feishuChannel.status().connected;
+          const failed = feishuChanged && config.feishuEnabled && !feishuOk;
           sendToClient(cid, {
-            type: "CONFIG_SAVED",
-            success: true,
-            message: tgOk ? "Saved. Telegram connected." : "Saved. Telegram not configured.",
-            telegramConnected: tgOk,
-            tunnelRunning: tunnelUp,
-          });
-        }).catch((err: any) => {
-          sendToClient(cid, {
-            type: "CONFIG_SAVED",
-            success: false,
-            message: `Saved but Telegram failed: ${err.message}`,
+            type: "CONFIG_SAVED", requestId: parsed.requestId,
+            success: !failed,
+            message: failed ? feishuChannel.status().error : feishuChanged ? (config.feishuEnabled ? "设置已保存，飞书已连接。" : "设置已保存，飞书已停用。") : "设置已保存。",
+            feishuConnected: feishuOk,
+            telegramConnected: isChannelActive(telegramChannel),
             tunnelRunning: isTunnelRunning(),
-          });
         });
       } catch (err: any) {
         console.error("[Gateway] Config save failed:", err);
         sendToClient(meta.clientId, {
           type: "CONFIG_SAVED",
+          requestId: parsed.requestId,
           success: false,
           message: err.message ?? "Save failed",
         });
       }
+      });
+
       break;
     }
     case "REQUEST_REVIEW": {
@@ -1147,11 +1269,14 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
         diffSection,
       ].filter(Boolean).join("\n");
 
-      // Create reviewer agent
+      // Reuse the same reviewer identity shown in the team picker.
+      const reviewerDef = agentDefs.find(def => def.teamRole === "reviewer")
+        ?? DEFAULT_AGENT_DEFS.find(def => def.teamRole === "reviewer")!;
       orc.createAgent({
         agentId: reviewerAgentId,
-        name: "Sophie",
-        role: "Code Reviewer — Code review, bugs, security, quality",
+        name: reviewerDef.name,
+        palette: reviewerDef.palette,
+        role: `${reviewerDef.role} — ${reviewerDef.skills}`,
         personality: "Constructive and thorough. Reviews like a mentor — explains the why, not just the what.",
         backend: reviewerBackendId,
       });
@@ -1228,6 +1353,7 @@ async function main() {
   // Always re-detect AI backends on startup (CLIs may be installed/removed between runs)
   {
     const detected = detectBackends();
+    config.detectedBackends = detected;
     if (detected.length > 0) {
       config.detectedBackends = detected;
       if (!config.defaultBackend || !detected.includes(config.defaultBackend)) {
@@ -1242,12 +1368,14 @@ async function main() {
   const backendsToUse = getAllBackends();
 
   // Sync bundled agent definitions to ~/.claude/agents/ for --agent resolution
-  syncAgentDefs();
+  if (readRuntimeEnv("SKIP_AGENT_SYNC") !== "1") syncAgentDefs();
 
   // Scope session storage to this gateway instance (prevents Tauri/Web/CLI context contamination)
   setSessionDir(config.instanceDir);
   setStorageRoot(path.join(config.instanceDir, "memory"));
   console.log(`[Gateway] Instance "${config.gatewayId}" → ${config.instanceDir}`);
+
+  workspaceLedger = new WorkspaceLedger(path.join(config.instanceDir, "workspace-history.json"));
 
   orc = createOrchestrator({
     workspace: config.defaultWorkspace,
@@ -1257,9 +1385,11 @@ async function main() {
     retry: { maxRetries: 2, escalateToLeader: true },
     promptsDir: path.join(CONFIG_DIR, "data", "prompts"),
     sandboxMode: config.sandboxMode,
+    getAgentPersona: (subject) => formatPersonaPrompt(readAgentPersona(subject)) + (workroom?.contextFor(`agent:${subject.agentId}`) ?? ""),
   });
 
   agentDefs = loadAgentDefs();
+  for (const def of agentDefs) personaStore.read({ kind: "definition", id: def.id }, def);
   setTelegramAgentDefs(agentDefs);
   console.log(`[Gateway] Loaded ${agentDefs.length} agent definitions (${agentDefs.filter(a => !a.isBuiltin).length} custom)`);
 
@@ -1311,6 +1441,7 @@ async function main() {
     }
     if (savedState.team && orc.getAgent(savedState.team.leadAgentId)) {
       const t = savedState.team;
+      teamWorkDir = savedState.agents.find(a => a.agentId === t.leadAgentId)?.workDir;
       if (t.phase === "execute") {
         // Execute phase: delegation state (pending tasks, counters) can't be restored,
         // but leader retains project context via session history.
@@ -1366,11 +1497,11 @@ async function main() {
   // Startup GC was removed because it could destroy worktrees with pending unmerged changes.
 
   runtimeState = registerRuntimeState();
-  process.env.BIT_OFFICE_GATEWAY_ID = config.gatewayId;
-  process.env.BIT_OFFICE_MACHINE_ID = config.machineId;
-  process.env.BIT_OFFICE_INSTANCE_DIR = config.instanceDir;
-  process.env.BIT_OFFICE_GATEWAY_PID = String(runtimeState.pid);
-  process.env.BIT_OFFICE_GATEWAY_STARTED_AT = String(runtimeState.startedAt);
+  process.env.PIKO_GATEWAY_ID = config.gatewayId;
+  process.env.PIKO_MACHINE_ID = config.machineId;
+  process.env.PIKO_INSTANCE_DIR = config.instanceDir;
+  process.env.PIKO_GATEWAY_PID = String(runtimeState.pid);
+  process.env.PIKO_GATEWAY_STARTED_AT = String(runtimeState.startedAt);
 
   // Events worth archiving in project history (skip noise like status/log/sync)
   const ARCHIVE_EVENT_TYPES = new Set([
@@ -1456,7 +1587,7 @@ async function main() {
             name: displayName,
             role: agent.cwd ? agent.cwd.split("/").pop() ?? agent.backendId : agent.backendId,
             isExternal: true,
-            palette: agent.pid % 6,
+            palette: agent.pid % CHARACTER_COUNT,
             pid: agent.pid,
             cwd: agent.cwd ?? undefined,
             startedAt: agent.startedAt,
@@ -1509,7 +1640,7 @@ async function main() {
       },
     },
   );
-  scanner.start();
+  if (readRuntimeEnv("DISABLE_PROCESS_SCAN") !== "1") scanner.start();
 
   const backendNames = config.detectedBackends.map((id) => getBackend(id)?.name ?? id).join(", ");
   console.log(`[Gateway] AI backends: ${backendNames || "none detected"} (default: ${getBackend(config.defaultBackend)?.name ?? config.defaultBackend})`);
@@ -1520,6 +1651,30 @@ async function main() {
   showPairCode();
 
   // Start transports (WS + optional Ably)
+  workroom = new WorkroomService({
+    directory: path.join(config.instanceDir, "workroom"),
+    members: () => {
+      const hired = orc.getAllAgents().filter(a => !a.agentId.startsWith("reviewer-"));
+      const members: WorkroomMember[] = hired.map(a => ({ key: `agent:${a.agentId}`, target: { kind: "agent", id: a.agentId }, name: a.name, role: a.role, palette: a.palette ?? 0, backend: a.backend, model: a.model }));
+      for (const def of agentDefs) if (!hired.some(a => a.name === def.name && a.role.split(/[—–]/)[0].trim() === def.role)) members.push({ key: `definition:${def.id}`, target: { kind: "definition", id: def.id }, name: def.name, role: def.role, palette: def.palette });
+      return members;
+    },
+    persona: member => {
+      const subject = member.target.kind === "agent" ? orc.getAgent(member.target.id) : agentDefs.find(def => def.id === member.target.id);
+      return formatPersonaPrompt(personaStore.read(member.target, subject ?? member));
+    },
+    backend: id => { const backend = getBackend(id); if (!backend) throw new Error(`未找到执行引擎 ${id}，请在成员设置中选择可用引擎。`); return backend; },
+    defaultBackend: () => config.defaultBackend, defaultModel: id => config.defaultModels[id],
+    evidence: member => {
+      const agent = member.target.kind === "agent" ? orc.getAgent(member.target.id) : undefined;
+      const tasks = workspaceLedger?.snapshot().tasks.filter(task => task.agentId === member.target.id || (!!agent?.teamId && task.teamId === agent.teamId)).slice(-20) ?? [];
+      return tasks.length ? "原有工作群的任务记录：\n" + tasks.map(task => `${task.agentName} [${task.status}] ${task.prompt.slice(0, 300)} → ${(task.summary || "暂无交付摘要").slice(0, 1200)}`).join("\n") : "";
+    },
+    sandboxMode: config.sandboxMode,
+    publish: snapshot => sendToOwners({ type: "WORKROOM_SYNC", snapshot }),
+  });
+  workroom.start();
+
   await initTransports(handleCommand);
 
   // Start Cloudflare Tunnel if configured
@@ -1564,6 +1719,7 @@ function cleanup() {
   scanner?.stop();
   previewServer.shutdown();
   stopTunnel();
+  workroom?.destroy();
   orc?.destroy();
   destroyTransports();
   clearRuntimeState();

@@ -1,4 +1,4 @@
-import type { RiskLevel } from "@office/shared";
+import type { RiskLevel } from "@piko/shared";
 
 interface PolicyCheck {
   needsApproval: boolean;

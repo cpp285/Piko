@@ -90,7 +90,7 @@ export const SPEECH_BUBBLE_FADE_SEC = 0.5
 export const SPEECH_BUBBLE_MAX_CHARS = 30
 export const INACTIVE_SEAT_TIMER_MIN_SEC = 3.0
 export const INACTIVE_SEAT_TIMER_RANGE_SEC = 2.0
-export const PALETTE_COUNT = 6
+export { CHARACTER_COUNT as PALETTE_COUNT } from "@piko/shared"
 export const HUE_SHIFT_MIN_DEG = 45
 export const HUE_SHIFT_RANGE_DEG = 271
 export const AUTO_ON_FACING_DEPTH = 3

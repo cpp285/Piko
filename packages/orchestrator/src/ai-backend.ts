@@ -2,9 +2,8 @@
  * AIBackend interface — consumers register their own implementations.
  * No concrete backends shipped in this package.
  *
- * Inspired by Overstory's AgentRuntime pattern: each CLI adapter knows
- * its own instruction file path, stability level, and capability flags.
- * See: https://github.com/jayminwest/overstory/blob/main/src/runtimes/types.ts
+ * Each CLI adapter declares its instruction file path, stability level,
+ * and capability flags.
  */
 
 export interface BuildArgsOpts {
@@ -41,7 +40,7 @@ export interface AIBackend {
   /** Whether this backend accepts stdin messages while running */
   supportsStdin?: boolean;
 
-  // ── Overstory-inspired adapter metadata ──
+  // ── Adapter metadata ──
 
   /**
    * Relative path to the instruction file within a worktree.
@@ -50,7 +49,7 @@ export interface AIBackend {
    *   codex   → AGENTS.md
    *   gemini  → GEMINI.md
    *   copilot → .github/copilot-instructions.md
-   *   cursor  → .cursor/rules/overstory.md
+   *   cursor  → .cursor/rules/instructions.md
    *   aider   → .aider.conf.yml (or prompt via CLI)
    * Used by worktree setup to deploy agent instructions to the right path.
    */
