@@ -511,14 +511,20 @@ function handleCommand(parsed: Command, meta: CommandMeta) {
 
   switch (parsed.type) {
     case "WORKROOM": {
+      void (async () => {
       try {
         if (!workroom) throw new Error("会话服务尚未就绪。");
         const result = workroom.handle(parsed.action);
+        if (result.openFilePath) {
+          const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer.exe" : "xdg-open";
+          await new Promise<void>((resolve, reject) => execFile(opener, [result.openFilePath!], error => error ? reject(new Error("无法打开文件，请检查系统默认应用。")) : resolve()));
+        }
         sendToClient(meta.clientId, { type: "WORKROOM_SYNC", snapshot: workroom.snapshot() });
-        sendToClient(meta.clientId, { type: "WORKROOM_RESULT", requestId: parsed.requestId, success: true, ...result });
+        sendToClient(meta.clientId, { type: "WORKROOM_RESULT", requestId: parsed.requestId, success: true, conversationId: result.conversationId, resource: result.resource, fileCount: result.fileCount, document: result.document });
       } catch (error) {
         sendToClient(meta.clientId, { type: "WORKROOM_RESULT", requestId: parsed.requestId, success: false, message: error instanceof Error ? error.message : "操作失败，请重试。" });
       }
+      })();
       break;
     }
     case "GET_AGENT_PERSONA":

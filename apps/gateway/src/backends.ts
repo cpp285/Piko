@@ -96,9 +96,9 @@ const backends: AIBackend[] = [
     supportsResume: false,
     supportsAgentType: false,
     supportsNativeWorktree: false,
-    supportsStructuredOutput: false,
+    supportsStructuredOutput: true,
     buildArgs(prompt, opts) {
-      const args = ["exec", prompt, "--skip-git-repo-check"];
+      const args = ["exec", prompt, "--skip-git-repo-check", "--json"];
       if (opts.noTools) {
         args.push("--sandbox", "read-only");
       } else if (opts.fullAccess && !isRoot) {
@@ -255,7 +255,8 @@ const VERSION_PROBES: Record<string, string> = {
   // "copilot" also names AWS Copilot CLI — verify GitHub's agentic CLI
   copilot: "copilot --version 2>&1 | grep -Eiq 'GitHub Copilot CLI|github copilot'",
   // "pi" collides with math utilities, coreutils, etc.
-  pi: "pi --version 2>&1 | grep -iq pi",
+  // Pi's version output is only a version number. Its help identifies the coding agent.
+  pi: "pi --help 2>&1 | grep -Eiq '^pi - AI coding assistant'",
   // "sp" collides with Sapling SCM and other tools
   sapling: "sp --version 2>&1 | grep -iq sapling",
 };

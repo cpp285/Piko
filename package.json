@@ -19,8 +19,10 @@
     "test:scene": "pnpm --filter piko exec tsx ../../scripts/scenes/verify-scenes.ts",
     "test:characters": "pnpm --filter piko exec tsx ../../scripts/characters/verify-characters.ts",
     "build:scene": "node scripts/scenes/build-scenes.mjs",
-    "test:chat": "pnpm --filter piko exec tsx --test ../web/src/components/office/ui/__tests__/conversation-model.test.ts",
-    "install:desktop": "bash scripts/install-desktop.sh"
+    "test:chat": "pnpm --filter piko exec tsx --test ../web/src/components/office/ui/__tests__/conversation-model.test.ts ../web/src/components/office/ui/__tests__/active-tasks.test.ts ../web/src/components/office/ui/__tests__/chat-markdown.test.ts ../web/src/components/office/ui/__tests__/document-preview.test.ts",
+    "install:desktop": "bash scripts/install-desktop.sh",
+    "check:public": "node scripts/check-public-files.mjs",
+    "test:public": "node --test scripts/check-public-files.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

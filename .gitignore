@@ -36,3 +36,21 @@ dist/
 *.local
 .piko/
 .piko-dev/
+
+# Personal resources and runtime exports are never part of the source release.
+/data/
+/runtime/
+/knowledge/
+/skills/
+/知识库/
+/技能/
+/config.json
+**/conversations.json
+**/session-tokens.json
+**/agent-sessions.json
+**/chat-history.json
+**/marketing-observations.jsonl
+*.app/
+*.dmg
+# Local acceptance reports can contain private paths, account data and skill names.
+/QA_*.md

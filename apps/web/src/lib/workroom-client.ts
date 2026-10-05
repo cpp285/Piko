@@ -6,7 +6,7 @@ const pending = new Map<string, { resolve: (result: Result) => void; reject: (er
 export function workroomRequest(action: WorkroomAction): Promise<Result> {
   const requestId = nanoid();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { pending.delete(requestId); reject(new Error("未收到回复。请检查连接后重试，你填写的内容已保留。")); }, 15000);
+    const timer = setTimeout(() => { pending.delete(requestId); reject(new Error("未收到回复。请检查连接后重试，你填写的内容已保留。")); }, action.op === "upload-resource" || action.op === "import-resource-folder" ? 60000 : 15000);
     pending.set(requestId, { resolve, reject, timer }); sendCommand({ type: "WORKROOM", requestId, action });
   });
 }

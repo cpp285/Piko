@@ -18,6 +18,8 @@ const child = spawn(path.join(sidecar, 'node'), [path.join(sidecar, 'gateway.js'
     FEISHU_ENABLED: 'false', ABLY_API_KEY: '', TELEGRAM_BOT_TOKEN: '', TELEGRAM_BOT_TOKENS: '', TUNNEL_TOKEN: '',
   },
 });
+// Subscribe before checking readiness: a signal can end the process before cleanup.
+const closed = new Promise(resolve => child.once('close', resolve));
 let output = '', errors = '';
 child.stdout.on('data', data => { output = (output + data).slice(-20000); });
 child.stderr.on('data', data => { errors = (errors + data).slice(-3000); });
@@ -29,6 +31,7 @@ try {
   while (Date.now() < deadline) {
     if (spawnError) throw spawnError;
     assert.equal(child.exitCode, null, `Bundled service exited: ${errors}`);
+    assert.equal(child.signalCode, null, `Bundled service terminated by ${child.signalCode}: ${errors}`);
     const match = output.match(/^GATEWAY_READY (.+)$/m);
     if (match) { port = JSON.parse(match[1]).port; break; }
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -42,8 +45,7 @@ try {
   assert.ok((await response.text()).includes('Piko'));
   console.log('安装包启动检查通过：运行环境、本地连接、界面资源。');
 } finally {
-  if (child.pid && child.exitCode === null) {
-    const closed = new Promise(resolve => child.once('exit', resolve));
+  if (child.pid && child.exitCode === null && child.signalCode === null) {
     child.kill('SIGTERM');
     const timer = setTimeout(() => child.kill('SIGKILL'), 3000);
     await closed;

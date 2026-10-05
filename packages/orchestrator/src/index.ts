@@ -64,3 +64,4 @@ import type { OrchestratorOptions } from "./types.js";
 export function createOrchestrator(options: OrchestratorOptions): Orchestrator {
   return new Orchestrator(options);
 }
+export { CodexAppServer, authorizedBrowserOrigin, type CodexApproval } from "./codex-app-server.js";

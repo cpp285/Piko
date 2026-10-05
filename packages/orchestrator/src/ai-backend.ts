@@ -39,6 +39,8 @@ export interface AIBackend {
   deleteEnv?: string[];
   /** Whether this backend accepts stdin messages while running */
   supportsStdin?: boolean;
+  /** App-server provides interactive approvals for workroom conversations. */
+  transport?: "codex-app-server";
 
   // ── Adapter metadata ──
 

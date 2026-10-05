@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { localArtifactPath, normalizePreviewCommand } from "@piko/shared";
+import { localArtifactPath, normalizePreviewCommand, workroomArtifactPath } from "@piko/shared";
+
+test("chat artifacts accept local and relative document links, never web or executable links", () => {
+  assert.equal(workroomArtifactPath("Personal-Agent-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97.md"), "Personal-Agent-使用指南.md");
+  assert.equal(workroomArtifactPath("file:///Users/test/稿件.md:12"), "/Users/test/稿件.md");
+  for (const link of ["https://example.com/article.md", "//example.com/article.md", "javascript:alert(1)", "run.command", "#part.md", "%broken.md"]) assert.equal(workroomArtifactPath(link), undefined);
+});
 import { parseAgentOutput, resolvePreview } from "@piko/orchestrator";
 
 test("Chinese static HTML delivery resolves a playable file instead of a prose launch command", () => {

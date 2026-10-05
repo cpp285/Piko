@@ -43,8 +43,10 @@ Groups can have a coordinator. A member can delegate with `@Name: task`, which t
 
 - **Direct messages and group chats:** persistent contacts, project groups, functional groups, coordinators and mention-based assignment.
 - **Editable identities:** each coworker has `agent/IDENTITY.md` for who they are and `agent/SOUL.md` for how they work. Local templates generate new role drafts without a model call.
-- **Per-member skills and reference material:** add text, local file or folder paths, and web links; enable or disable each entry.
-- **Proactive updates:** schedule daily or interval-based direct messages, and receive reports when group work completes or fails.
+- **Per-member skills and reference material:** upload files or entire folders from your computer, or add text and web links. Skill bundles retain scripts and reference files; enable or disable each entry per coworker.
+- **Proactive updates:** check daily or at intervals and send a direct message when there is a useful update; quiet checks stay out of the chat feed. Group-completion reports are optional.
+- **In-app document reading:** open Markdown deliverables directly in Piko, with tables, heading links, linked documents and a source view.
+- **Per-member browser approvals:** Codex conversations support interactive approval and revocable site access grants. A site connection grant does not approve publishing, uploads or other actions.
 - **Agent and model settings:** choose detected local engines; specify a model name for adapters that support it, or keep the engine default.
 - **Task management:** queues, execution status, approvals, cancellation, failed-task retry and project recaps.
 - **Conversation-specific context:** separate execution contexts for each conversation and participating member, with reusable identity and member settings.
@@ -115,7 +117,7 @@ This launcher stores data in `.review-runtime/local`, defaults to Codex, enables
 - **Scheduling requires a running app:** tasks do not execute while the app is closed. On restart, overdue triggers are coalesced into one catch-up run. Times use the local device timezone.
 - **Context separation is distinct from permissions:** independent conversation context does not itself provide an operating-system sandbox. File and tool access depend on engine and runtime settings.
 - **Skills and knowledge are reference inputs:** adding a URL does not connect an external account or build a search index. Members read material as needed using their existing tools.
-- **Private configuration stays out of the source repository:** local conversations, model credentials and Feishu secrets are not included.
+- **Personal resources stay separate from source code:** configured knowledge libraries, skills, member identities and account grants stay in the local runtime profile. Source releases exclude these resources, chat history, model credentials and Feishu secrets. Run `pnpm check:public` before committing to check staged files.
 
 ## Development
 

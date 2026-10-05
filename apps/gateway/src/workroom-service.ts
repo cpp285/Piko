@@ -1,10 +1,29 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { AgentSession, type AIBackend, type OrchestratorEvent } from "@piko/orchestrator";
-import { MemberSettingsSchema, type MemberSettings, type RoomMessage, type WorkroomAction, type WorkroomConversation, type WorkroomMember, type WorkroomSnapshot } from "@piko/shared";
+import { CHAT_COMMUNICATION_STYLE, MemberSettingsSchema, type MemberSettings, type RoomMessage, type WorkroomAction, type WorkroomConversation, type WorkroomMember, type WorkroomSnapshot } from "@piko/shared";
+import { importResource, readResourceFolder } from "./resource-upload.js";
+import { readMarkdownPreview } from "./markdown-preview.js";
 
 export const settingsVersion = (settings: MemberSettings) => createHash("sha256").update(JSON.stringify(settings)).digest("hex");
+const PROACTIVE_SILENCE = "[PIKO_NO_MESSAGE]";
+
+function mentionedMembers(text: string, members: WorkroomMember[]): string[] {
+  const matches = new Set<string>();
+  const byName = [...members].sort((a, b) => b.name.length - a.name.length);
+  for (let position = text.indexOf("@"); position !== -1; position = text.indexOf("@", position + 1)) {
+    // An email address is not an instruction to a similarly named coworker.
+    if (position > 0 && /[a-zA-Z0-9._%+\-]/.test(text[position - 1])) continue;
+    const member = byName.find(member => text.startsWith(member.name, position + 1));
+    if (!member) continue;
+    const following = text[position + member.name.length + 1];
+    if (following && /[\p{L}\p{N}_\-]/u.test(following)) continue;
+    matches.add(member.key);
+  }
+  return members.filter(member => matches.has(member.key)).map(member => member.key);
+}
+
 export function nextContactTime(settings: MemberSettings, now: number): number {
   if (settings.proactive.cadence === "interval") return now + settings.proactive.intervalMinutes * 60000;
   const [hour, minute] = settings.proactive.time.split(":").map(Number);
@@ -92,9 +111,15 @@ export class WorkroomService {
     const room: WorkroomConversation = { id: randomUUID(), kind, name: name || (kind === "direct" ? this.member(memberKeys[0]).name : "新群聊"), memberKeys, coordinator: coordinator && memberKeys.includes(coordinator) ? coordinator : memberKeys[0], folder: this.folder(folder), contextVersion: 0, messages: [], readAt: this.now(), createdAt: this.now(), updatedAt: this.now() };
     this.rooms.push(room); return room;
   }
-  handle(action: WorkroomAction): { conversationId?: string } {
+  handle(action: WorkroomAction): { conversationId?: string; openFilePath?: string; resource?: ReturnType<typeof importResource>["resource"]; fileCount?: number; document?: ReturnType<typeof readMarkdownPreview> } {
     switch (action.op) {
       case "sync": return {};
+      case "upload-resource":
+      case "import-resource-folder": {
+        this.member(action.memberKey);
+        if (this.memberSettings(action.memberKey)[action.category].length >= 40) throw new Error("这类资料已达到 40 项，请先移除不需要的条目并保存。");
+        return importResource(this.options.directory, action.op === "upload-resource" ? action : { op: "upload-resource", memberKey: action.memberKey, category: action.category, ...readResourceFolder(action.path) });
+      }
       case "settings": {
         this.member(action.memberKey);
         const previous = this.memberSettings(action.memberKey);
@@ -102,6 +127,7 @@ export class WorkroomService {
         const next = MemberSettingsSchema.parse(action.settings);
         if (next.proactive.enabled && !next.proactive.instruction.trim()) throw new Error("开启主动联系前，请填写希望成员做什么、汇报什么。");
         for (const resource of [...next.skills, ...next.knowledge]) {
+          if (!resource.enabled) continue;
           if (!resource.content.trim()) throw new Error(`请填写「${resource.title}」的内容或来源。`);
           if (resource.source === "url" && !/^https?:\/\//i.test(resource.content.trim())) throw new Error("资料链接需要以 http:// 或 https:// 开头。");
           if (resource.source === "file" && (!path.isAbsolute(resource.content.trim()) || !existsSync(resource.content.trim()))) throw new Error(`找不到「${resource.title}」的本地文件或目录。`);
@@ -127,7 +153,7 @@ export class WorkroomService {
         if (room.messages.some(m => m.id === action.messageId)) return { conversationId: room.id };
         if (this.busy(room.id)) throw new Error("成员正在回复，请等这一轮结束，或先停止再发送。");
         room.memberKeys.forEach(k => this.member(k));
-        const mentions = room.memberKeys.filter(k => action.text.includes(`@${this.member(k).name}`));
+        const mentions = mentionedMembers(action.text, room.memberKeys.map(k => this.member(k)));
         const recipients = room.kind === "direct" ? room.memberKeys : mentions.length ? mentions : [room.coordinator];
         room.messages.push({ id: action.messageId, sender: "user", text: action.text, timestamp: this.now(), state: "done" }); room.updatedAt = this.now(); room.readAt = this.now();
         this.save();
@@ -136,6 +162,20 @@ export class WorkroomService {
         return { conversationId: room.id };
       }
       case "read": { const room = this.room(action.conversationId); room.readAt = this.now(); this.save(); return {}; }
+      case "preview-markdown": {
+        const room = this.room(action.conversationId);
+        return { document: readMarkdownPreview(room.folder || path.join(this.options.directory, "scratch", room.id), action.path) };
+      }
+      case "open-file": {
+        const room = this.room(action.conversationId);
+        const workspace = room.folder || path.join(this.options.directory, "scratch", room.id);
+        const target = path.resolve(workspace, action.path);
+        if (!/\.(?:md|txt|html?|pdf|csv|docx|xlsx|pptx|png|jpe?g|gif|webp|svg)$/i.test(target)) throw new Error("请打开文档或图片类型的交付文件。");
+        if (!existsSync(workspace) || !existsSync(target)) throw new Error("这个交付文件不存在，请让成员检查文件路径。");
+        const root = realpathSync(workspace); const file = realpathSync(target);
+        if (!file.startsWith(root + path.sep) || !statSync(file).isFile()) throw new Error("只能打开本会话文件夹内的交付文件。");
+        return { openFilePath: file };
+      }
       case "cancel": {
         this.room(action.conversationId);
         for (const run of [...this.runs.values()].filter(r => r.roomId === action.conversationId)) { run.root.cancelled = true; run.session.cancelTask(); run.message.state = "cancelled"; run.message.text ||= "已停止"; delete run.message.approval; this.runs.delete(run.message.id); }
@@ -144,7 +184,7 @@ export class WorkroomService {
       case "approval": {
         const run = [...this.runs.values()].find(r => r.roomId === action.conversationId && r.message.approval?.id === action.approvalId);
         if (!run) throw new Error("这项确认已失效。");
-        run.session.resolveApproval(action.approvalId, action.decision); delete run.message.approval; this.save(); return {};
+        run.session.resolveApproval(action.approvalId, action.decision, action.values); delete run.message.approval; this.save(); return {};
       }
     }
   }
@@ -192,12 +232,13 @@ export class WorkroomService {
       let session = this.sessions.get(contextId);
       if (!session) {
         session = (this.options.createSession ?? (opts => new AgentSession(opts)))({
-          agentId: contextId, name: member.name, role: member.role, allowDelegation: room.kind === "group", workspace, backend: { ...backend, supportsAgentType: false, buildArgs: (prompt, opts) => {
+          agentId: contextId, name: member.name, role: member.role, allowDelegation: room.kind === "group", workspace, backend: { ...backend, transport: backend.id === "codex" ? "codex-app-server" : backend.transport, supportsAgentType: false, buildArgs: (prompt, opts) => {
             if (Buffer.byteLength(prompt, "utf8") > 180000) throw new Error("本次上下文过大，请减少启用的资料或缩短消息后重试。");
             return backend.buildArgs(prompt, opts);
           } }, model, sandboxMode: this.options.sandboxMode,
           getPersona: () => this.options.persona(member) + this.resources(member),
-          renderPrompt: (_name, vars) => `你是 ${member.name}，岗位为 ${member.role}。这是用户在 Piko 中的${room.kind === "group" ? "群聊" : "私聊"}。默认自然地用中文交流；只有用户的要求涉及工作时才执行相应任务。不要把普通讨论自动变成开发项目。\n${room.folder ? `当前关联文件夹：${room.folder}` : "用户没有关联项目文件夹。当前目录只是本会话的独立临时工作区；不要自行搜索用户其他项目目录。"}\n群成员：${room.memberKeys.map(k => this.member(k).name).join("、")}。${room.kind === "group" ? "需要协作时，只能在独立一行使用 @成员姓名: 具体任务，应用会真实下发。不要把普通提及写成派单。每轮最多 8 次执行，避免循环讨论。" : "私聊直接向用户回复；不要假称已经派发给其他人。"}\n${vars.prompt}`,
+          getApprovedBrowserOrigins: () => this.memberSettings(key).browserOrigins,
+          renderPrompt: (_name, vars) => `你是 ${member.name}，岗位为 ${member.role}。这是用户在 Piko 中的${room.kind === "group" ? "群聊" : "私聊"}。默认自然地用中文交流；只有用户的要求涉及工作时才执行相应任务。不要把普通讨论自动变成开发项目。\n${CHAT_COMMUNICATION_STYLE}\n${room.folder ? `当前关联文件夹：${room.folder}` : "用户没有关联项目文件夹。当前目录只是本会话的独立临时工作区；不要自行搜索用户其他项目目录。"}\n群成员：${room.memberKeys.map(k => this.member(k).name).join("、")}。${room.kind === "group" ? "需要协作时，只能在独立一行使用 @成员姓名: 具体任务，应用会真实下发。不要把普通提及写成派单。每轮最多 8 次执行，避免循环讨论。" : "私聊直接向用户回复；不要假称已经派发给其他人。"}\n${vars.prompt}`,
           onEvent: event => this.event(event),
         });
         this.sessions.set(contextId, session);
@@ -218,10 +259,18 @@ export class WorkroomService {
     if (!("taskId" in event) || !event.taskId) return;
     const run = this.runs.get(event.taskId); if (!run) return;
     const { message } = run; const room = this.room(run.roomId);
-    if (event.type === "log:append") { message.details = ((message.details || "") + event.chunk).slice(-60000); this.changed(); }
-    if (event.type === "log:activity") { message.text = event.text; this.changed(); }
-    if (event.type === "approval:needed") { message.approval = { id: event.approvalId, title: event.title, summary: event.summary }; this.save(); }
+    if (event.type === "log:append" && !(message.proactive && event.chunk.trim() === PROACTIVE_SILENCE)) { message.details = ((message.details || "") + event.chunk).slice(-60000); this.changed(); }
+    if (event.type === "log:activity" && !(message.proactive && event.text.trim() === PROACTIVE_SILENCE)) { message.text = event.text; this.changed(); }
+    if (event.type === "approval:needed") { message.approval = { id: event.approvalId, title: event.title, summary: event.summary, fields: event.fields }; this.save(); }
     if (event.type === "task:done" || event.type === "task:failed") {
+      // A scheduled check may find nothing worth interrupting the user for.
+      // Only a successful proactive run can opt out; normal replies/errors remain visible.
+      if (event.type === "task:done" && message.proactive && !run.root.cancelled
+        && (event.result.fullOutput || event.result.summary || "").trim() === PROACTIVE_SILENCE) {
+        room.messages = room.messages.filter(item => item.id !== message.id);
+        room.updatedAt = Math.max(room.createdAt, ...room.messages.map(item => item.timestamp));
+        this.runs.delete(event.taskId); this.save(); return;
+      }
       message.state = run.root.cancelled ? "cancelled" : event.type === "task:done" ? "done" : "error";
       message.text = event.type === "task:done" ? event.result.fullOutput || event.result.summary || "本轮已结束，没有返回文字。" : event.error;
       delete message.approval; room.updatedAt = this.now(); message.timestamp = this.now(); this.runs.delete(event.taskId);
@@ -253,7 +302,7 @@ export class WorkroomService {
       // Advance before execution: restart/wake coalesces missed intervals into one run.
       schedule.lastRunAt = this.now(); schedule.nextRunAt = nextContactTime(settings, this.now()); this.save();
       const evidence = this.rooms.filter(r => r.id !== room.id && r.memberKeys.includes(member.key)).map(r => `会话「${r.name}」最近记录：\n${r.messages.filter(m => m.sender === member.key).slice(-3).map(m => `[${m.state}] ${m.text.slice(0, 2000)}`).join("\n")}`).join("\n");
-      this.dispatch(room, member.key, `用户保存的主动联系要求：${settings.proactive.instruction}\n\n本人参与的会话进展摘要（只用于本次向用户汇报，不转发到其他群）：\n${evidence || "暂无其他会话记录。没有新信息就明确说明，不编造进展。"}\n${this.options.evidence?.(member) || ""}`, { count: 0, cancelled: false, seen: new Set() }, true);
+      this.dispatch(room, member.key, `用户保存的主动联系要求：${settings.proactive.instruction}\n当前本机时间：${new Date(this.now()).toString()}。\n这是一次独立的私聊检查，不是群聊完成通知。结合当前私聊历史，提供新的观察、想法或需要用户处理的事；不要复制群聊交付，也不要重复上次提醒。除非用户明确要求每次报告检查结果，没有值得联系的新信息时只返回 ${PROACTIVE_SILENCE}，应用会保持安静，不把这个标记显示给用户。遵守用户设置的免打扰要求。不要为了凑回复编造进展。\n\n本人参与的其他会话背景（用于了解进展和避免重复，不要原样转发）：\n${evidence || "暂无其他会话记录。"}\n${this.options.evidence?.(member) || ""}`, { count: 0, cancelled: false, seen: new Set() }, true);
     }
   }
   destroy() {

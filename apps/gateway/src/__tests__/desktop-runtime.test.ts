@@ -6,6 +6,7 @@ import { tmpdir, networkInterfaces } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createConnection } from "node:net";
+import { request as httpRequest } from "node:http";
 import WebSocket from "ws";
 
 test("desktop gateways use distinct OS ports, isolated profiles and authenticated loopback connections", { timeout: 30000 }, async t => {
@@ -60,6 +61,25 @@ test("desktop gateways use distinct OS ports, isolated profiles and authenticate
   assert.equal(connection.gatewayId, "desktop");
   assert.ok(connection.sessionToken);
   assert.ok(connection.wsUrl.endsWith(`:${first.port}`));
+  for (const origin of ["https://untrusted.example", "https://localhost.untrusted.example", "null"]) {
+    const response = await fetch(`http://127.0.0.1:${first.port}/connect`, { headers: { origin } });
+    assert.equal(response.status, 403, `Untrusted origin ${origin} must not receive an owner token`);
+    assert.equal(response.headers.get("access-control-allow-origin"), null);
+    assert.equal((await response.json()).sessionToken, undefined);
+  }
+  const reboundStatus = await new Promise<number | undefined>((resolve, reject) => {
+    const request = httpRequest(`http://127.0.0.1:${first.port}/connect`, { headers: { host: "untrusted.example" } }, response => {
+      response.resume(); resolve(response.statusCode);
+    });
+    request.on("error", reject); request.end();
+  });
+  assert.equal(reboundStatus, 403, "A rebound Host must not bootstrap a local owner session");
+  for (const origin of ["tauri://localhost", "http://tauri.localhost", "http://localhost:3000", `http://127.0.0.1:${first.port}`]) {
+    const response = await fetch(`http://127.0.0.1:${first.port}/connect`, { headers: { origin } });
+    assert.equal(response.status, 200, `Local app origin ${origin} must still connect`);
+    assert.equal(response.headers.get("access-control-allow-origin"), origin);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  }
   const open = async () => {
     const ws = new WebSocket(`ws://127.0.0.1:${first.port}`);
     sockets.push(ws);

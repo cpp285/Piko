@@ -5,6 +5,7 @@ import { tr, trNode, useLocale } from "@/lib/ui-language";
 import { useState, useEffect, useRef, memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkReadableEmphasis from "@/lib/remark-readable-emphasis";
 import { localArtifactPath } from "@piko/shared";
 import { sendCommand } from "@/lib/connection";
 import type { ChatMessage } from "@/store/office-store";
@@ -174,7 +175,7 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
 const MdContent = memo(function MdContent({ text, onPreview }: { text: string; onPreview?: (url: string) => void }) {
   useLocale();
   return (
-    <ReactMarkdown urlTransform={(url) => url} remarkPlugins={[remarkGfm]} components={{ ...mdComponents,
+    <ReactMarkdown urlTransform={(url) => url} remarkPlugins={[remarkGfm, remarkReadableEmphasis]} components={{ ...mdComponents,
       a({ href, children }) {
         const filePath = localArtifactPath(href);
         if (!filePath) return <a href={href} target="_blank" rel="noopener noreferrer" style={{ wordBreak: "break-all" }}>{children}</a>;

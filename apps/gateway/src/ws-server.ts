@@ -13,6 +13,7 @@ import * as Ably from "ably";
 import type { Channel, CommandMeta } from "./transport.js";
 import { writePortLock } from "./runtime-state.js";
 import { nanoid } from "nanoid";
+import { permitsQuickConnect } from "./local-connection.js";
 
 /**
  * Detect requests arriving through Cloudflare Tunnel.
@@ -123,10 +124,16 @@ export const wsChannel: Channel = {
 
         // Quick connect — local-only, never exposed through tunnel
         if (req.method === "GET" && req.url === "/connect") {
-          if (config.ablyApiKey || isTunnelRequest(req)) {
+          res.setHeader("Cache-Control", "no-store");
+          res.removeHeader("Access-Control-Allow-Origin");
+          if (config.ablyApiKey || isTunnelRequest(req) || !permitsQuickConnect(req)) {
             res.writeHead(403, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "Quick connect disabled" }));
             return;
+          }
+          if (req.headers.origin) {
+            res.setHeader("Access-Control-Allow-Origin", req.headers.origin);
+            res.setHeader("Vary", "Origin");
           }
           const sessionToken = nanoid();
           addSessionToken(sessionToken, "owner");

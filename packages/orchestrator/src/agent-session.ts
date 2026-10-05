@@ -3,6 +3,8 @@ import path from "path";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { resolveHomeDataDir } from "@piko/shared/node";
 import { CONFIG } from "./config.js";
+import { CodexAppServer, type CodexApproval } from "./codex-app-server.js";
+import { validateApprovalValues, type ApprovalField, type ApprovalValues } from "@piko/shared";
 import { resolvePreview } from "./preview-resolver.js";
 import { parseAgentOutput, parseDelegationLine } from "./output-parser.js";
 import { nanoid } from "nanoid";
@@ -149,7 +151,8 @@ export function saveRecoveryContext(agentId: string, recovery: RecoveryContext) 
 
 interface PendingApproval {
   approvalId: string;
-  resolve: (decision: "yes" | "no") => void;
+  fields?: ApprovalField[];
+  resolve: (decision: "yes" | "no", values?: ApprovalValues) => void;
 }
 
 /** Callback for delegation: (fromAgentId, targetName, prompt) => void */
@@ -170,6 +173,7 @@ export interface AgentSessionOpts {
   /** Allow bounded conversation routing without making this person a tool-less team lead. */
   allowDelegation?: boolean;
   getPersona?: () => string;
+  getApprovedBrowserOrigins?: () => string[];
   agentId: string;
   name: string;
   role: string;
@@ -227,6 +231,7 @@ export class AgentSession {
   private _memoryContext: string;
   private _model: string | undefined;
   private getPersona?: () => string;
+  private getApprovedBrowserOrigins?: () => string[];
   /** Whether this leader has already been through execute phase at least once */
   private _hasExecuted = false;
   private _lastResult: string | null = null;
@@ -292,6 +297,7 @@ export class AgentSession {
     this.role = opts.role;
     this.personality = opts.personality ?? "";
     this.getPersona = opts.getPersona;
+    this.getApprovedBrowserOrigins = opts.getApprovedBrowserOrigins;
     this.workspace = opts.workspace;
     this.sessionId = loadSessionMap()[opts.agentId] ?? null;
     this.hasHistory = opts.resumeHistory ?? !!this.sessionId;
@@ -469,7 +475,8 @@ export class AgentSession {
       // IMPORTANT: Only use --resume with a specific session ID, never --continue.
       // --continue resumes the LAST Claude Code session globally, which in multi-agent
       // setups causes agent context contamination (e.g. Dev gets Kai's session).
-      const args = this.backend.buildArgs(fullPrompt, {
+      const interactiveCodex = this.backend.transport === "codex-app-server";
+      const args = interactiveCodex ? ["app-server", "--listen", "stdio://"] : this.backend.buildArgs(fullPrompt, {
         continue: false,
         resumeSessionId: this.role.toLowerCase().includes("review") ? undefined : (this.sessionId ?? undefined),
         fullAccess,
@@ -496,12 +503,12 @@ export class AgentSession {
         throw Object.assign(new Error(`Working directory "${cwd}" does not exist`), { code: "ECWDMISSING" });
       }
 
-      // stdin MUST be "ignore" — "pipe" causes Claude Code to hang waiting for input
+      // Only app-server speaks a bidirectional protocol. CLI backends expect EOF.
       // detached: true creates a new process group so we can kill the entire tree on cancel
       this.process = spawn(this.backend.command, args, {
         cwd,
         env: cleanEnv,
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: [interactiveCodex ? "pipe" : "ignore", "pipe", "pipe"],
         detached: true,
       });
 
@@ -554,7 +561,7 @@ export class AgentSession {
 
       // Handle a line of plain text output (delegation detection + logging)
       // fromStreamJson: true when text comes from stream-json blocks (skip verb/path noise filters)
-      const handleTextLine = (text: string, fromStreamJson = false) => {
+      const handleTextLine = (text: string, fromStreamJson = false, appendLog = true) => {
         const lines = text.split("\n").filter((l) => l.trim());
         const visibleLines: string[] = [];
         for (const line of lines) {
@@ -576,7 +583,7 @@ export class AgentSession {
         // JSON contains complete text blocks. Plain CLI output arrives line by line;
         // keep its continuation lines until the process finishes or a new @name starts.
         if (fromStreamJson) flushDelegation();
-        if (visibleLines.length > 0) {
+        if (appendLog && visibleLines.length > 0) {
           this.onEvent({
             type: "log:append",
             agentId: this.agentId,
@@ -591,10 +598,67 @@ export class AgentSession {
       let jsonLineBuf = "";
       let stdoutChunkCount = 0;
       let seenFirstJson = false;
+      let codexReply = "";
+      let codexFailure = false;
+      let appServer: CodexAppServer | undefined;
+      let serverExitTimer: ReturnType<typeof setTimeout> | undefined;
+      // Codex exec sends progress on stdout only with --json. Consume public
+      // activity here; reasoning and tool output must not become chat replies
+      // or accidental delegation instructions.
+      const handleCodexEvent = (msg: any): boolean => {
+        if (this.backend.id !== "codex" || typeof msg.type !== "string") return false;
+        const activity = (text: string) => {
+          this.lastActivityText = text;
+          this.onEvent({ type: "log:activity", agentId: this.agentId, taskId, text });
+          this.persistWorkState("running");
+        };
+        if (msg.type === "thread.started" && typeof msg.thread_id === "string") {
+          this.sessionId = msg.thread_id; saveSessionId(this.agentId, msg.thread_id);
+        } else if (msg.type === "turn.started") activity("正在处理任务…");
+        else if (msg.type === "item.completed" && msg.item?.type === "agent_message" && typeof msg.item.text === "string") {
+          codexReply = msg.item.text;
+          this.onEvent({ type: "log:append", agentId: this.agentId, taskId, stream: "stdout", chunk: codexReply + "\n" });
+          activity(codexReply.replace(/\s+/g, " ").slice(0, 180));
+        } else if (msg.type === "item.started" || msg.type === "item.updated" || msg.type === "item.completed") {
+          const item = msg.item;
+          if (item?.type === "command_execution") activity(msg.type === "item.completed" ? "命令已结束，正在检查结果…" : "正在执行命令…");
+          else if (item?.type === "web_search") activity("正在查阅网页资料…");
+          else if (item?.type === "mcp_tool_call") activity(`正在使用工具：${String(item.tool || item.name || "MCP").slice(0, 80)}`);
+          else if (item?.type === "file_change") {
+            const files = Array.isArray(item.changes) ? item.changes.filter((c: any) => typeof c.path === "string").map((c: any) => c.path as string) : [];
+            if (msg.type === "item.completed" && item.status !== "failed") files.forEach((f: string) => this.taskChangedFiles.add(f));
+            activity(files.length ? `正在更新文件：${files.map((f: string) => path.basename(f)).join("、").slice(0, 120)}` : "正在更新文件…");
+          }
+        } else if (msg.type === "turn.completed" && msg.usage) {
+          this.taskInputTokens = msg.usage.input_tokens ?? 0;
+          this.taskOutputTokens = msg.usage.output_tokens ?? 0;
+          this.onEvent({ type: "token:update", agentId: this.agentId, inputTokens: this.taskInputTokens, outputTokens: this.taskOutputTokens });
+        } else if (msg.type === "turn.failed" || msg.type === "error") {
+          const error = msg.error?.message || msg.message || "Codex 执行失败";
+          this.stderrBuffer += `\nERROR: ${error}\n`;
+          if (msg.type === "turn.failed") codexFailure = true;
+        }
+        return true;
+      };
+      if (interactiveCodex) {
+        const child = this.process;
+        appServer = new CodexAppServer({
+          send: message => { if (!child.stdin?.destroyed) child.stdin?.write(JSON.stringify(message) + "\n"); },
+          emit: handleCodexEvent,
+          approve: (title, summary, fields) => this.requestFormApproval(title, summary, "med", fields),
+          approvedBrowserOrigins: this.getApprovedBrowserOrigins,
+          finish: () => {
+            child.stdin?.end();
+            // Some MCP servers keep stdio alive after the completed turn.
+            serverExitTimer = setTimeout(() => { if (child.exitCode == null && child.signalCode == null) child.kill("SIGTERM"); }, 1500);
+          },
+        });
+        child.stdin?.on("error", () => { /* close/error listeners report the process failure */ });
+      }
       this.process.stdout?.on("data", (data: Buffer) => {
         const raw = data.toString();
         stdoutChunkCount++;
-        if (stdoutChunkCount <= 3) {
+        if (this.backend.id !== "codex" && stdoutChunkCount <= 3) {
           console.log(`[Agent ${this.name} raw-stdout #${stdoutChunkCount}] ${raw.slice(0, 150)}`);
         }
         jsonLineBuf += raw;
@@ -611,6 +675,8 @@ export class AgentSession {
             try {
               const msg = JSON.parse(line);
               seenFirstJson = true;
+              if (appServer) { appServer.handle(msg); continue; }
+              if (handleCodexEvent(msg)) continue;
               // Capture session ID for --resume on next run.
               // Save to disk immediately — if the app crashes mid-task, we need
               // this ID to resume the conversation on restart.
@@ -735,6 +801,9 @@ export class AgentSession {
       });
 
       this.process.on("close", (code) => {
+        if (serverExitTimer) clearTimeout(serverExitTimer);
+        if (appServer) { if (appServer.exitCode != null) code = appServer.exitCode; else code = 1; appServer.dispose(); }
+        this.clearPendingApprovals();
         const agentPid = this.process?.pid;
         this.process = null;
         if (this.taskTimeout) { clearTimeout(this.taskTimeout); this.taskTimeout = null; }
@@ -755,6 +824,8 @@ export class AgentSession {
             if (line.startsWith("{")) {
               try {
                 const msg = JSON.parse(line);
+                if (appServer) continue;
+                if (handleCodexEvent(msg)) continue;
                 if (msg.type === "assistant" && msg.message?.content) {
                   for (const block of msg.message.content) {
                     if (block.type === "text" && block.text) {
@@ -778,6 +849,13 @@ export class AgentSession {
           }
         }
 
+        if (codexFailure && code === 0) code = 1;
+        if (codexReply) {
+          this.stdoutBuffer = codexReply;
+          this._lastResultText = codexReply;
+          // Public text was already streamed; only parse the final delegation now.
+          if (code === 0 && !this.cancelled) handleTextLine(codexReply, true, false);
+        }
         if (code === 0 && !this.cancelled) flushDelegation();
         else pendingDelegation = null;
 
@@ -958,6 +1036,7 @@ export class AgentSession {
         });
         this.idleTimer = setTimeout(() => { this.idleTimer = null; this.setStatus("idle"); }, CONFIG.timing.idleErrorDelayMs);
       });
+      if (appServer) void appServer.start(fullPrompt, cwd, this._isTeamLead ? "read-only" : fullAccess ? "danger-full-access" : "workspace-write", this._model);
     } catch (err) {
       this.setStatus("error");
       this.onEvent({
@@ -1058,6 +1137,7 @@ export class AgentSession {
     const queuedTasks = this.taskQueue;
     this.taskQueue = [];
     this._userCancelled = true;
+    this.clearPendingApprovals();
 
     if (this.taskTimeout) { clearTimeout(this.taskTimeout); this.taskTimeout = null; }
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
@@ -1132,7 +1212,7 @@ export class AgentSession {
       }
       this.process = null;
     }
-    this.pendingApprovals.clear();
+    this.clearPendingApprovals();
     saveSessionId(this.agentId, null);
   }
 
@@ -1159,28 +1239,38 @@ export class AgentSession {
     clearAgentWorkState(this.agentId);
   }
 
-  resolveApproval(approvalId: string, decision: "yes" | "no") {
+  resolveApproval(approvalId: string, decision: "yes" | "no", values: ApprovalValues = {}) {
     if (approvalId === "__all__") {
       for (const [, pending] of this.pendingApprovals) {
-        pending.resolve(decision);
+        pending.resolve(decision, decision === "yes" ? validateApprovalValues(pending.fields || [], values) : {});
       }
       this.pendingApprovals.clear();
       return;
     }
     const pending = this.pendingApprovals.get(approvalId);
     if (pending) {
-      pending.resolve(decision);
+      pending.resolve(decision, decision === "yes" ? validateApprovalValues(pending.fields || [], values) : {});
       this.pendingApprovals.delete(approvalId);
+      if (this.process && this.pendingApprovals.size === 0) this.setStatus("working");
     }
   }
 
   async requestApproval(title: string, summary: string, riskLevel: "low" | "med" | "high"): Promise<"yes" | "no"> {
+    return (await this.requestFormApproval(title, summary, riskLevel)).decision;
+  }
+  private clearPendingApprovals() {
+    for (const pending of this.pendingApprovals.values()) pending.resolve("no", {});
+    this.pendingApprovals.clear();
+  }
+  private requestFormApproval(title: string, summary: string, riskLevel: "low" | "med" | "high", fields?: ApprovalField[]): Promise<CodexApproval> {
     const approvalId = nanoid();
     const taskId = this.currentTaskId ?? "unknown";
 
     this.setStatus("waiting_approval");
 
-    this.onEvent({
+    return new Promise(resolve => {
+      this.pendingApprovals.set(approvalId, { approvalId, fields, resolve: (decision, values) => resolve({ decision, values: values || {} }) });
+      this.onEvent({
       type: "approval:needed",
       approvalId,
       agentId: this.agentId,
@@ -1188,10 +1278,8 @@ export class AgentSession {
       title,
       summary,
       riskLevel,
+      fields,
     });
-
-    return new Promise((resolve) => {
-      this.pendingApprovals.set(approvalId, { approvalId, resolve });
     });
   }
 

@@ -76,6 +76,15 @@
 .bubble ul { list-style:disc; }.bubble ol { list-style:decimal; }
 .bubble pre,.execution pre { white-space:pre-wrap; overflow-wrap:anywhere; font:12px/1.7 var(--font-mono),monospace; }
 .bubble a { color:#39765e; text-decoration:underline; }
+.tableScroll { max-width:100%; overflow-x:auto; margin:12px 0; border:1px solid #dce5d8; border-radius:8px; }
+.tableScroll:last-child { margin-bottom:0; }
+.tableScroll:focus-visible { outline:2px solid #39765e; outline-offset:2px; }
+.tableScroll table { width:100%; min-width:520px; border-collapse:collapse; font-size:13px; line-height:1.7; }
+.tableScroll th,.tableScroll td { padding:10px 12px; min-width:110px; border-right:1px solid #dce5d8; border-bottom:1px solid #dce5d8; text-align:left; vertical-align:top; }
+.tableScroll th { background:#edf3e9; font-weight:650; color:#3f614c; }
+.tableScroll tbody tr:nth-child(even) { background:#f8faf5; }
+.tableScroll th:last-child,.tableScroll td:last-child { border-right:0; }
+.tableScroll tbody tr:last-child td { border-bottom:0; }
 .bubble[data-state=error] { border-color:#e2c5b9; color:#a25b42; }
 .working { color:#7d977b; display:block; margin-top:7px; font-size:11px; }
 .execution { font-size:11px; color:#849383; margin-top:7px; }
@@ -100,6 +109,12 @@
 .modalFooter>span { color:#83907f; font-size:12px; }
 .modalFooter>div { display:flex; gap:8px; }
 .settingsLayout { display:grid; grid-template-columns:150px minmax(0,1fr); gap:28px; min-height:390px; }
+.settingsFieldset { border:0; padding:0; margin:0; min-width:0; }
+.uploadPanel { border:1px solid #dce6d7; border-radius:11px; background:#f7faf4; padding:15px; margin-bottom:20px; }
+.uploadActions { display:flex; flex-wrap:wrap; gap:8px; }
+.uploadActions button { font-size:12px; white-space:nowrap; }
+.uploadPanel p { font-size:12px; margin:10px 0 0; overflow-wrap:anywhere; }
+.uploadStatus { font-size:12px; color:#39765e; margin-top:10px; }
 .settingsNav { display:flex; flex-direction:column; gap:6px; border-right:1px solid #e1e8dd; padding-right:14px; align-self:start; }
 .settingsNav button { border:0; justify-content:flex-start; background:none; padding:11px 10px; color:#819080; }
 .settingsNav button[aria-current=page] { color:#39765e; background:#e9f1e4; }
@@ -134,3 +149,5 @@
 @media(max-width:700px) { .sidebar{width:100%;flex-basis:100%}.main{display:none}.workspace[data-chat-open=true]>.sidebar{display:none}.workspace[data-chat-open=true]>.main{display:flex}.header .back{display:inline-flex;border:0;padding:4px}.header{padding:12px 14px}.header p{max-width:74vw}.headerActions{gap:5px}.directory{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));padding:16px}.feed{padding:17px 12px}.messageBody{max-width:88%}.message .avatar{width:32px;height:38px}.message{gap:7px}.bubble{padding:11px 13px;font-size:13px}.composer{padding:10px 14px 14px}.composerBottom>span{font-size:9px}.memberStrip{padding:7px 14px}.settingsLayout{grid-template-columns:1fr;gap:15px}.settingsNav{flex-direction:row;overflow:auto;border-right:0;border-bottom:1px solid #e1e8dd;padding:0 0 10px}.settingsNav button{font-size:12px;white-space:nowrap;padding:8px}.settingsNav button svg{width:15px}.settingsContent h3{font-size:17px}.sectionHeading{flex-wrap:wrap}.modalFooter{flex-wrap:wrap}.modalFooter>div{margin-left:auto}.memberChoices{grid-template-columns:1fr}.legacy{flex-direction:column}.modal{max-height:94dvh} }
 @media(prefers-reduced-motion:reduce){.workspace *{scroll-behavior:auto!important}}
 .settingsNav { position:sticky; top:0; z-index:2; background:#fff; }
+
+.selfMember { display: inline-flex; align-items: center; padding: 6px 12px; color: var(--term-text, #344e41); font-size: 13px; white-space: nowrap; }

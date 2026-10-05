@@ -15,3 +15,4 @@ export * from "./preview-fields";
 export { migrateBrowserStorage } from "./storage-migration";
 
 export * from "./workroom";
+export * from "./approval-form";

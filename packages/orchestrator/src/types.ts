@@ -83,6 +83,7 @@ export interface ApprovalNeededEvent {
   title: string;
   summary: string;
   riskLevel: RiskLevel;
+  fields?: import("@piko/shared").ApprovalField[];
 }
 
 export interface LogAppendEvent {

@@ -60,6 +60,41 @@ fn set_active_tasks(count: usize, state: tauri::State<'_, DesktopState>) {
     state.active_tasks.store(count, Ordering::SeqCst);
 }
 
+fn external_web_url(raw: &str) -> Result<tauri::Url, String> {
+    let url = tauri::Url::parse(raw).map_err(|_| "网页地址无效".to_string())?;
+    if !matches!(url.scheme(), "http" | "https") || !url.has_host() {
+        return Err("只能打开 http 或 https 网页链接".to_string());
+    }
+    Ok(url)
+}
+
+#[tauri::command]
+async fn open_external_url(url: String) -> Result<(), String> {
+    let url = external_web_url(&url)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let status = Command::new("/usr/bin/open")
+            .arg(url.as_str())
+            .status()
+            .map_err(|e| format!("无法打开默认浏览器：{e}"))?;
+        if status.success() { Ok(()) } else { Err("默认浏览器未能打开网页，请检查浏览器设置。".to_string()) }
+    }).await.map_err(|e| e.to_string())?
+}
+
+// WKWebView's HTML file chooser does not select directories in this app.
+#[tauri::command]
+async fn pick_resource_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("选择技能或资料文件夹")
+            .blocking_pick_folder()
+            .map(|selected| selected.into_path()
+                .map(|p| p.to_string_lossy().into_owned())
+                .map_err(|e| e.to_string()))
+            .transpose()
+    }).await.map_err(|e| e.to_string())?
+}
+
 fn runtime_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     // A test/development override is explicit; installed apps own a separate persistent profile.
     if let Some(dir) = std::env::var_os("PIKO_DESKTOP_DATA_DIR")
@@ -426,6 +461,8 @@ fn main() {
             get_gateway_info,
             get_gateway_error,
             set_active_tasks,
+            open_external_url,
+            pick_resource_folder,
             restart_gateway
         ])
         .build(tauri::generate_context!())
@@ -441,4 +478,31 @@ fn main() {
             tauri::RunEvent::Exit => stop_gateway(app),
             _ => (),
         });
+}
+
+#[cfg(test)]
+mod external_url_tests {
+    use super::external_web_url;
+
+    #[test]
+    fn preserves_web_links_and_query_parameters() {
+        for raw in [
+            "https://example.com/video/demo",
+            "https://example.com/article?q=a%20b&ref=piko#section",
+            "http://localhost:3000/preview",
+        ] {
+            assert_eq!(external_web_url(raw).unwrap().as_str(), raw);
+        }
+    }
+
+    #[test]
+    fn rejects_non_web_targets_before_launching_any_application() {
+        for raw in [
+            "javascript:alert(1)", "file:///etc/passwd", "data:text/html,hello",
+            "mailto:example@example.com", "piko://run", "//example.com",
+            "/tmp/example.html", "--args", "", "https://",
+        ] {
+            assert!(external_web_url(raw).is_err(), "unexpectedly accepted {raw}");
+        }
+    }
 }

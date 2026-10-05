@@ -22,9 +22,9 @@ cp "$MONOREPO/.review-runtime/desktop-gateway/index.js" "$SIDECAR/gateway.js"
 rm -rf "$SIDECAR/web" "$SIDECAR/agents"
 cp -R "$MONOREPO/apps/web/out" "$SIDECAR/web"
 cp -R "$MONOREPO/packages/orchestrator/agents" "$SIDECAR/agents"
-node "$SCRIPT_DIR/smoke-sidecar.mjs" "$SIDECAR"
 # Node is a nested executable, so give local development packages an integrity signature.
 if [ "$(uname)" = "Darwin" ]; then
   codesign --force --sign - "$SIDECAR/node"
 fi
+node "$SCRIPT_DIR/smoke-sidecar.mjs" "$SIDECAR"
 printf '运行环境已准备：%s\n' "$SIDECAR"
